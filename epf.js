@@ -128,62 +128,40 @@ export async function getList(u = 'v5/current/') {
   return out
 }
 
-export const epfStream = (filename, handler) =>
-  new Promise((resolve, reject) => {
-    const fileStream = createReadStream(filename)
-    const table = basename(filename, '.tbz')
-    const info = { table, grouping: filename.match(/(itunes|match|popularity|pricing)/)[1] }
-    let lineCount = 0
-    let dbNames = []
-
-    const splitS = split('\x02\n')
-    const bzS = bz2()
-
-    fileStream
-      .pipe(bzS)
-      .pipe(splitS)
-      .on('data', async (line) => {
-        if (lineCount++ === 0) {
-          const f = line.split('\x01')
-          dbNames = [f[0].split('#').pop(), ...f.slice(1)]
-        } else if (line.startsWith('#')) {
-          if (line.startsWith('#primaryKey:')) {
-            info.primaryKey = line.split(':').pop().split('\x01')
-          } else if (line.startsWith('#recordsWritten:')) {
-            // this is at the end of the file, so might not be in every read (if no handler is setup)
-            info.recordsWritten = parseInt(line.split(':').pop())
-          } else if (line.startsWith('#exportMode:')) {
-            info.exportMode = line.split(':').pop()
-          } else if (line.startsWith('#dbTypes:')) {
-            info.db = line
-              .split(':')
-              .pop()
-              .split('\x01')
-              .reduce((a, c, i) => {
-                return { ...a, [dbNames[i]]: c }
-              }, {})
-          } else {
-            if (!line.startsWith('##legal:')) {
-              console.log(line)
-            }
-          }
-          if (!handler && info.primaryKey && info.exportMode && info.db) {
-            fileStream.destroy()
-            resolve(info)
-          }
-        } else {
-          if (handler) {
-            const data = line.split('\x01')
-            const record = {}
-            for (const d in data) {
-              record[dbNames[d]] = data[d]
-            }
-            splitS.cork()
-            await handler(record, info)
-            splitS.uncork()
-          }
+// create a stream that parses epf file (emitting info & record messages)
+export const createEpfParseStream = (filename, onlyInfo) => {
+  const fileStream = createReadStream(filename)
+  const info = { table: basename(filename, '.tbz'), grouping: filename.match(/(itunes|match|popularity|pricing)/)[1], lineCount: 0 }
+  let outtedInfo = false
+  const outPipe = fileStream
+    .pipe(bz2())
+    .pipe(split('\x02\n'))
+    .on('data', (line) => {
+      if (info.lineCount++ === 0) {
+        const f = line.split('\x01')
+        info.dbNames = [f[0].split('#').pop(), ...f.slice(1)]
+      } else if (line.startsWith('#')) {
+        if (line.startsWith('#primaryKey:')) {
+          info.primaryKey = line.split(':').pop().split('\x01')
+        } else if (line.startsWith('#recordsWritten:')) {
+          // this is at the end of the file, so might not be in every read (if onlyInfo)
+          info.recordsWritten = parseInt(line.split(':').pop())
+        } else if (line.startsWith('#exportMode:')) {
+          info.exportMode = line.split(':').pop()
+        } else if (line.startsWith('#dbTypes:')) {
+          info.dbTypes = line.split(':').pop().split('\x01')
         }
-      })
-      .on('error', reject)
-      .on('finish', () => resolve(info))
-  })
+      } else {
+        if (!outtedInfo) {
+          outPipe.emit('info', info)
+          outtedInfo = true
+        }
+        if (onlyInfo) {
+          outPipe.destroy()
+        } else {
+          outPipe.emit('record', line.split('\x01'))
+        }
+      }
+    })
+  return outPipe
+}
