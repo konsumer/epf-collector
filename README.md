@@ -16,6 +16,6 @@ npm run incremental
 # the files are big, so this is important to get right
 npm run check
 
-# this updates the database with all the data in your epdf dir (downloaded with collect/incremental)
+# this updates the database with all the data in your epf dir (downloaded with collect/incremental)
 npm run import
 ```

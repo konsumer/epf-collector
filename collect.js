@@ -4,7 +4,7 @@
 import { writeFile, mkdir } from 'node:fs/promises'
 import { get, getList, exists } from './epf.js'
 
-const outDir = 'data/epf/full'
+const [, , outDir = 'data/epf/full'] = process.argv
 
 // get all the full dumps
 console.log('Getting full collections...')

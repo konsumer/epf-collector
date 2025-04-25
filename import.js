@@ -2,7 +2,13 @@ import { epfStream } from './epf.js'
 import { glob } from 'glob'
 import Database from 'better-sqlite3'
 
-const db = new Database('data/epf.sqlite3')
+let [, , dbFile = 'data/epf.sqlite3', ...epfs] = process.argv
+
+if (!epfs.length) {
+  epfs = await glob('data/epf/**/*.tbz')
+}
+
+const db = new Database(dbFile)
 
 const prepared = {}
 
@@ -40,7 +46,7 @@ function saveRecord(data, { table, db }) {
   prepared[table].run(...row)
 }
 
-for (const f of await glob('data/epf/**/*.tbz')) {
+for (const f of epfs) {
   // 1st pass: build table
   const info = await epfStream(f)
   await makeTable(info)
