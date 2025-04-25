@@ -6,9 +6,10 @@
     "author": "konsumer",
     "license": "MIT",
     "scripts": {
-        "collect": "node collect.mjs"
+        "collect": "node collect.js"
     },
     "dependencies": {
-        "cheerio": "^1.0.0"
+        "cheerio": "^1.0.0",
+        "cli-progress": "^3.12.0"
     }
 }
