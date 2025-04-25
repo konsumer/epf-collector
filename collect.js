@@ -7,7 +7,7 @@ import { get, getList, exists } from './epf.js'
 const outDir = 'data/epf/full'
 
 // get all the full dumps
-console.log('Getting collections...')
+console.log('Getting full collections...')
 for (const collection of await getList()) {
   if (collection !== 'incremental/') {
     console.log(collection)
@@ -19,8 +19,7 @@ for (const collection of await getList()) {
       } catch (e) {}
       console.log(`  ${outDir}/${collection}${file}: ${fe ? 'exists' : 'downloading'}`)
       if (!fe) {
-        const bytes = await get(`v5/current/${collection}${file}`).then((r) => r.arrayBuffer())
-        await writeFile(`${outDir}/${collection}${file}`, new Uint8Array(bytes))
+        await get(`v5/current/${collection}${file}`, `${outDir}/${collection}${file}`)
       }
     }
   }

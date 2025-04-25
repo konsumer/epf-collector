@@ -1,4 +1,10 @@
 import { stat } from 'node:fs/promises'
+import { createWriteStream, createReadStream } from 'node:fs'
+import { Readable } from 'node:stream'
+import bz2 from 'unbzip2-stream'
+import split from 'split2'
+import { basename } from 'node:path'
+
 import * as cheerio from 'cheerio'
 import cliProgress from 'cli-progress'
 
@@ -67,23 +73,47 @@ const showProgress = (progress) => (r) => {
   )
 }
 
-// Get an EPF url
-export const get = (u) => {
+// Get an EPF url: either fetch-response, or download the file (stream to disk)
+export const get = (u, filename) => {
   const bar = new cliProgress.SingleBar({ etaBuffer: 10000, format: '{bar} {percentage}% | {duration_formatted}/{eta_formatted}' }, cliProgress.Presets.shades_classic)
   bar.start()
+
   return fetch(`https://feeds.itunes.apple.com/feeds/epf/${u}`, {
     headers: {
       Authorization: 'Basic ' + btoa(EPF_USERNAME + ':' + EPF_PASSWORD)
     }
-  }).then(
-    showProgress(({ loaded, total }) => {
-      bar.total = parseInt(total / 1024 / 1024)
-      if (total == loaded) {
-        bar.stop()
+  })
+    .then(
+      showProgress(({ loaded, total }) => {
+        bar.total = total
+        if (total == loaded) {
+          bar.stop()
+        }
+        bar.update(loaded)
+      })
+    )
+    .then(async (r) => {
+      if (filename) {
+        const s = createWriteStream(filename)
+        if (!r.ok) {
+          s.close()
+          throw new Error(`Failed to fetch: ${r.status} ${r.statusText}`)
+        }
+        const nodeReadable = Readable.fromWeb(r.body)
+        await new Promise((resolve, reject) => {
+          nodeReadable.pipe(s)
+          nodeReadable.on('error', (err) => {
+            s.close()
+            reject(err)
+          })
+          s.on('finish', resolve)
+          s.on('error', reject)
+        })
+        return { success: true, filename }
+      } else {
+        return r
       }
-      bar.update(loaded / 1024 / 1024)
     })
-  )
 }
 
 // get current list of tbz's
@@ -97,3 +127,63 @@ export async function getList(u = 'v5/current/') {
   }
   return out
 }
+
+export const epfStream = (filename, handler) =>
+  new Promise((resolve, reject) => {
+    const fileStream = createReadStream(filename)
+    const table = basename(filename, '.tbz')
+    const info = { table, grouping: filename.match(/(itunes|match|popularity|pricing)/)[1] }
+    let lineCount = 0
+    let dbNames = []
+
+    const splitS = split('\x02\n')
+    const bzS = bz2()
+
+    fileStream
+      .pipe(bzS)
+      .pipe(splitS)
+      .on('data', async (line) => {
+        if (lineCount++ === 0) {
+          const f = line.split('\x01')
+          dbNames = [f[0].split('#').pop(), ...f.slice(1)]
+        } else if (line.startsWith('#')) {
+          if (line.startsWith('#primaryKey:')) {
+            info.primaryKey = line.split(':').pop().split('\x01')
+          } else if (line.startsWith('#recordsWritten:')) {
+            // this is at the end of the file, so might not be in every read (if no handler is setup)
+            info.recordsWritten = parseInt(line.split(':').pop())
+          } else if (line.startsWith('#exportMode:')) {
+            info.exportMode = line.split(':').pop()
+          } else if (line.startsWith('#dbTypes:')) {
+            info.db = line
+              .split(':')
+              .pop()
+              .split('\x01')
+              .reduce((a, c, i) => {
+                return { ...a, [dbNames[i]]: c }
+              }, {})
+          } else {
+            if (!line.startsWith('##legal:')) {
+              console.log(line)
+            }
+          }
+          if (!handler && info.primaryKey && info.exportMode && info.db) {
+            fileStream.destroy()
+            resolve(info)
+          }
+        } else {
+          if (handler) {
+            const data = line.split('\x01')
+            const record = {}
+            for (const d in data) {
+              record[dbNames[d]] = data[d]
+            }
+            splitS.cork()
+            await handler(record, info)
+            splitS.uncork()
+          }
+        }
+      })
+      .on('error', reject)
+      .on('finish', () => resolve(info))
+  })
