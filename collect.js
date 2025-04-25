@@ -13,20 +13,23 @@ const exists = async (path) => {
   }
 }
 
+const outDir = 'data/epf/full'
+
 // get all the full dumps
+console.log('Getting collections...')
 for (const collection of await getList()) {
   if (collection !== 'incremental/') {
-    const files = await getList(`v5/current/${collection}`)
     console.log(collection)
+    const files = await getList(`v5/current/${collection}`)
     for (const file of files) {
-      const fe = await exists(`data/${collection}${file}`)
+      const fe = await exists(`${outDir}/${collection}${file}`)
       try {
-        await mkdir(`data/${collection}`, { recursive: true })
+        await mkdir(`${outDir}/${collection}`, { recursive: true })
       } catch (e) {}
-      console.log(`  data/${collection}${file}: ${fe ? 'exists' : 'downloading'}`)
+      console.log(`  ${outDir}/${collection}${file}: ${fe ? 'exists' : 'downloading'}`)
       if (!fe) {
         const bytes = await get(`v5/current/${collection}${file}`).then((r) => r.arrayBuffer())
-        await writeFile(`data/${collection}${file}`, new Uint8Array(bytes))
+        await writeFile(`${outDir}/${collection}${file}`, new Uint8Array(bytes))
       }
     }
   }
