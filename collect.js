@@ -1,17 +1,8 @@
-// this just grabs the initial collection (full dumps)
+// this grabs the initial collection (full dumps)
 // normally you would also do incremental once a week
 
-import { writeFile, stat, mkdir } from 'node:fs/promises'
-import { get, getList } from './epf.js'
-
-const exists = async (path) => {
-  try {
-    await stat(path)
-    return true
-  } catch (e) {
-    return false
-  }
-}
+import { writeFile, mkdir } from 'node:fs/promises'
+import { get, getList, exists } from './epf.js'
 
 const outDir = 'data/epf/full'
 

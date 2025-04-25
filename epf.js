@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises'
 import * as cheerio from 'cheerio'
 import cliProgress from 'cli-progress'
 
@@ -8,6 +9,17 @@ if (!EPF_USERNAME || !EPF_PASSWORD) {
   process.exit(1)
 }
 
+// simply check if file exists
+export const exists = async (path) => {
+  try {
+    await stat(path)
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+// fetch function to show progress
 const showProgress = (progress) => (r) => {
   if (!r.ok) {
     throw Error(r.status + ' ' + r.statusText)

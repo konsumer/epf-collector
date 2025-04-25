@@ -1,15 +1,16 @@
 {
-    "name": "epf-tool",
-    "version": "0.0.0",
-    "type": "module",
-    "private": true,
-    "author": "konsumer",
-    "license": "MIT",
-    "scripts": {
-        "collect": "node collect.js"
-    },
-    "dependencies": {
-        "cheerio": "^1.0.0",
-        "cli-progress": "^3.12.0"
-    }
+  "name": "epf-tool",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "author": "konsumer",
+  "license": "MIT",
+  "scripts": {
+    "collect": "node collect.js",
+    "increment": "node increment.js"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "cli-progress": "^3.12.0"
+  }
 }
