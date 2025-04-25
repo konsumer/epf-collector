@@ -1,0 +1,14 @@
+{
+    "name": "epf-tool",
+    "version": "0.0.0",
+    "type": "module",
+    "private": true,
+    "author": "konsumer",
+    "license": "MIT",
+    "scripts": {
+        "collect": "node collect.mjs"
+    },
+    "dependencies": {
+        "cheerio": "^1.0.0"
+    }
+}
