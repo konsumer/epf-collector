@@ -96,21 +96,23 @@ const convertValue = (value, type) => {
     case 'LONGTEXT':
     case 'VARCHAR':
       return value
+    case 'INTEGER':
     case 'INT32':
-      return parseInt(value)
+      return parseInt(value || 0)
     case 'BIGINT':
     case 'INT64':
-      return BigInt(value)
+      return BigInt(value || 0n)
+    case 'DECIMAL':
     case 'FLOAT':
     case 'DOUBLE':
-      return parseFloat(value)
+      return parseFloat(value || 0)
     case 'BOOLEAN':
       return value === 'true'
     case 'DATETIME':
     case 'DATE':
     case 'TIME_MILLIS':
     case 'TIMESTAMP_MILLIS':
-      return new Date(value).getTime()
+      return value ? new Date(value).getTime() : 0
     case 'BYTE_ARRAY':
       return Buffer.from(value, 'base64')
     default:

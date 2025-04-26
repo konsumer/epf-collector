@@ -1,6 +1,7 @@
 import { Readable, Transform } from 'node:stream'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, stat, unlink } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
+import { dirname } from 'node:path'
 import parquet from 'parquetjs'
 
 import progress from 'progress-stream'
@@ -16,6 +17,16 @@ const { EPF_USERNAME, EPF_PASSWORD } = process.env
 if (!EPF_USERNAME || !EPF_PASSWORD) {
   console.error('EPF_USERNAME & EPF_PASSWORD are required.')
   process.exit(1)
+}
+
+// check if a file exists
+export const exists = async f => {
+  try {
+    await stat(f)
+    return true
+  } catch (e) {
+    return false
+  }
 }
 
 // create a node stream from fetch
@@ -154,23 +165,42 @@ function createDebugStream() {
   })
 }
 
-// test query
-const url = 'https://feeds.itunes.apple.com/feeds/epf/v5/current/incremental/current/itunes20250425/application.tbz'
-const options = {
-  headers: {
-    Authorization: `Basic ${btoa(`${EPF_USERNAME}:${EPF_PASSWORD}`)}`
+// wrapper to import an EPF file (show progress, parse, output parquet)
+export async function getEpfFile(u, outFilename) {
+  const options = {
+    headers: {
+      Authorization: `Basic ${btoa(`${EPF_USERNAME}:${EPF_PASSWORD}`)}`
+    }
   }
+  await mkdir(dirname(outFilename), { recursive: true })
+  const web = await createFetchStream(`https://feeds.itunes.apple.com/feeds/epf/v5/current${u}`, options)
+  const prog = createRequestProgessStream(web.response)
+  const bunzip = bz2()
+  const splitter = split('\x02\n')
+  const parser = createEPFParserStream()
+  const debug = createDebugStream()
+  const parq = createParquetStream(outFilename)
+
+  await pipeline(web, prog, bunzip, splitter, parser, parq)
 }
 
-await mkdir('data/itunes', { recursive: true })
-
-const web = await createFetchStream(url, options)
-const prog = createRequestProgessStream(web.response)
-const bunzip = bz2()
-const splitter = split('\x02\n')
-const parser = createEPFParserStream()
-const debug = createDebugStream()
-const parq = createParquetStream('data/itunes/application.parquet')
-
-// await pipeline(web, prog, bunzip, splitter, parser, debug, process.stdout)
-await pipeline(web, prog, bunzip, splitter, parser, parq)
+// example update
+const rInfo = /([a-z_]+)([0-9]{4})([0-9]{2})([0-9]{2})\/([a-z_]+)\.tbz/
+for (const u of await getEPFList()) {
+  let [m, collection, dateY, dateM, dateD, table] = rInfo.exec(u)
+  const date = new Date(dateY, dateM-1, dateD)
+  const outFile = `data/epf/epf_type=update/epf_group=${collection}/epf_date=${date.getTime()/1000}/${table}.parquet`
+  if (await exists(outFile)) {
+    console.log(green('skipping'), outFile)
+  } else {
+    console.log(green('downloading'), outFile)
+    try {
+      await getEpfFile(u, outFile)
+    } catch (e) {
+      // No partial records
+      console.error(red('ERROR'), ':', e.message)
+      await unlink(outFile)
+    }
+  }
+  console.log('')
+}
