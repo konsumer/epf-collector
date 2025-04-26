@@ -194,6 +194,7 @@ for (const u of await getEPFList()) {
     console.log(green('skipping'), outFile)
   } else {
     console.log(green('downloading'), outFile)
+    console.log('')
     try {
       await getEpfFile(u, outFile)
     } catch (e) {
@@ -202,5 +203,4 @@ for (const u of await getEPFList()) {
       await unlink(outFile)
     }
   }
-  console.log('')
 }
