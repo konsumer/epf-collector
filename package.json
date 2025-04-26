@@ -5,11 +5,10 @@
   "private": true,
   "author": "konsumer",
   "scripts": {
-    "files_check": "node files_check",
-    "files_collect": "node files_collect",
-    "files_import": "node files_import",
-    "setup": "node collect.js full",
-    "start": "node collect.js"
+    "check": "node files_check",
+    "collect": "node files_collect",
+    "import": "node files_import",
+    "info": "node files_info"
   },
   "dependencies": {
     "@duckdb/node-api": "^1.2.2-alpha.18",

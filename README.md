@@ -6,28 +6,17 @@ export EPF_USERNAME=your_username
 export EPF_PASSWORD=your_password
 ```
 
+You can do just parts of the process (using interim-files):
+
 ```bash
 # Collect all the current EPF data:
 # do this once to collect all the past data, initially
 # it's very big
-npm run setup
-
-# Update the current EPF data
-# do this once a week to update using incremental data
-npm start
-
-# you can also collect only part of the EPF in your database
-./collect.js update data/parquet itunes match popularity pricing
-```
-
-You can do just parts of the process (using interim-files) if you want:
-
-```bash
-# Get all files
 ./files_collect.js full
 ./files_collect.js full data/epf itunes match popularity pricing
 
-# Get update files
+# Update the current EPF data
+# do this once a week to update using incremental data
 ./files_collect.js
 ./files_collect.js update data/epf itunes match popularity pricing
 
