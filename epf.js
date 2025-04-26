@@ -1,7 +1,7 @@
 // Library functions for turning EPF data into parquet files
 
 import { createReadStream } from 'node:fs'
-import { readFile }  from 'node:fs/promises'
+import { readFile, stat }  from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { Transform } from 'node:stream'
 import { mkdirSync } from 'node:fs'
@@ -11,6 +11,15 @@ import bz2 from 'unbzip2-stream'
 import split from 'split2'
 import parquetjs from 'parquetjs'
 import { PassThrough } from 'node:stream'
+
+export const exists = async f => {
+  try {
+    await stat(f)
+    return true
+  } catch (e) {
+    return false
+  }
+}
 
 // check a single file with md5 file next to it
 export async function md5check(filePath) {

@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
-import { stat } from 'node:fs/promises'
 import { glob } from 'glob'
-import { epfToParquet  } from './epf.js'
+import { epfToParquet, exists  } from './epf.js'
 
 let [,,  outputDir = 'data/parquet', ...inFiles ] = process.argv
 
@@ -16,13 +15,12 @@ for (const file of inFiles) {
   const outFile = `${outputDir}/import_type=${type}/import_group=${group}/import_date=${new Date(`${year}-${month}-${day}`).getTime()/1000}/${table}.parq`
   const info = { type, group, table, date: [parseInt(year),parseInt(month), parseInt(day) ], outFile }
 
-  try {
-    await stat(outFile)
-    console.log('skipping', info)
-  } catch (e) {
-    console.log('starting', info)
+  if (await exists(outFile)) {
+    console.log('\x1b[32mskipping\x1b[0m', info)
+  } else {
+    console.log('\x1b[32mstarting\x1b[0m', info)
     await epfToParquet(file, outFile)
-      .then(result =>  console.log('finished', result))
-      .catch(err => console.error(`Failed to process ${file}:`, err))
+      .then(result =>  console.log('\x1b[32mfinished\x1b[0m:', result.rowCount))
+      .catch(err => console.error(`\x1b[41mFailed to process ${file}:\x1b[0m`, err))
   }
 }

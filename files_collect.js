@@ -1,22 +1,15 @@
 #!/usr/bin/env node
 
 import { getList, get } from './epf_remote.js'
+import { exists } from './epf.js'
 
 // this grabs the initial collection (full dumps)
 // normally you would also do update once a week
 // and full only once, initially
 
-import { basename, dirname } from 'node:path'
-import { mkdir, stat } from 'node:fs/promises'
+import { basename } from 'node:path'
+import { mkdir } from 'node:fs/promises'
 
-const exists = async f => {
-  try {
-    await stat(f)
-    return true
-  } catch (e) {
-    return false
-  }
-}
 
 let [,,type='update', outputDir='data/epf', ...groups] = process.argv
 if (!groups.length) {
