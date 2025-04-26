@@ -4,6 +4,7 @@
 
 import { glob } from 'glob'
 import { md5check } from './epf.js'
+import { green, red } from './colors.js'
 
 let [,, ...inFiles ] = process.argv
 if (!inFiles.length) {
@@ -17,7 +18,7 @@ for (const f of inFiles) {
   if (!ok) {
     allOk = false
   }
-  console.log(`${ok ? '\x1b[32mOK\x1b[0m' : '\x1b[41mNO\x1b[0m'} ${f}`)
+  console.log(`${ok ? green('OK') : red('NO')} ${f}`)
 }
 
 if (!allOk) {

@@ -2,6 +2,7 @@
 
 import { glob } from 'glob'
 import { epfToParquet, exists  } from './epf.js'
+import { red, green } from './colors.js'
 
 let [,,  outputDir = 'data/parquet', ...inFiles ] = process.argv
 
@@ -16,11 +17,11 @@ for (const file of inFiles) {
   const info = { type, group, table, date: [parseInt(year),parseInt(month), parseInt(day) ], outFile }
 
   if (await exists(outFile)) {
-    console.log('\x1b[32mskipping\x1b[0m', info)
+    console.log(green('skipping'), info)
   } else {
-    console.log('\x1b[32mstarting\x1b[0m', info)
+    console.log(green('starting'), info)
     await epfToParquet(file, outFile)
-      .then(result =>  console.log('\x1b[32mfinished\x1b[0m:', result.rowCount))
-      .catch(err => console.error(`\x1b[41mFailed to process ${file}:\x1b[0m`, err))
+      .then(result =>  console.log(green('finished'), result.rowCount))
+      .catch(err => console.error(red(`Failed to process ${file}:`), err))
   }
 }

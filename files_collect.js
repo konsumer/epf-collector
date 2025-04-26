@@ -2,6 +2,7 @@
 
 import { getList, get } from './epf_remote.js'
 import { exists } from './epf.js'
+import { green, yellow } from './colors.js'
 
 // this grabs the initial collection (full dumps)
 // normally you would also do update once a week
@@ -18,7 +19,7 @@ if (!groups.length) {
 
 const listStartUrl = type === 'update' ? 'v5/current/incremental/current/' : 'v5/current/'
 
-console.log(`Collecting ${groups.map(s => `\x1b[33m${s}\x1b[0m`).join(', ')}`)
+console.log(`Collecting ${groups.map(s => yellow(s)).join(', ')}`)
 
 for (const groupList of await getList(listStartUrl)) {
   if (groupList !== 'incremental/') {
@@ -28,9 +29,9 @@ for (const groupList of await getList(listStartUrl)) {
     for (const fileUrl of await getList(groupUrl)) {
       const filename = `${outputDir}/${type}/${group}/${basename(fileUrl)}`
       if (await exists(filename)) {
-        console.log(`\x1b[32mskipping\x1b[0m ${filename}`)
+        console.log(`${green('skipping')} ${filename}`)
       } else {
-        console.log(`\x1b[32mdownloading\x1b[0m ${filename}`)
+        console.log(`${green('downloading')} ${filename}`)
         await get(`${groupUrl}${fileUrl}`, filename)
       }
     }
