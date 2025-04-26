@@ -40,8 +40,8 @@ You can do just parts of the process (using interim-files):
 
 Once you have collected all your data as parquet files, you will need some way to read them. I like to use [duckdb](https://duckdb.org):
 
-```
-printf "COPY (SELECT * FROM read_parquet('data/parquet/**/*.parq') LIMIT 1) TO "example.json";" | duckdb
+```sql
+SELECT * FROM read_parquet('data/parquet/**/application.parquet');
 ```
 
 Read more about it [here](https://duckdb.org/docs/stable/data/parquet/overview.html).
