@@ -125,7 +125,7 @@ function createEPFParserStream() {
   })
 }
 
-// receieves row and meta-info (from createEPFParserStream) and writes to file
+// receives row and meta-info (from createEPFParserStream) and writes to file
 function createParquetStream(filename) {
   let writer
   const s = new Transform({
@@ -154,7 +154,7 @@ function createParquetStream(filename) {
   return s
 }
 
-// simple debug-stream that just spits out JSON
+// simple debug-stream that just spits out log of incoming data
 function createDebugStream() {
   return new Transform({
     objectMode: true,
@@ -166,7 +166,7 @@ function createDebugStream() {
 }
 
 // wrapper to import an EPF file (show progress, parse, output parquet)
-export async function getEpfFile(u, outFilename) {
+export async function getEpfFileAsParquet(u, outFilename) {
   const options = {
     headers: {
       Authorization: `Basic ${btoa(`${EPF_USERNAME}:${EPF_PASSWORD}`)}`
@@ -185,21 +185,21 @@ export async function getEpfFile(u, outFilename) {
 }
 
 // example update
+const type ='full'
 const rInfo = /([a-z_]+)([0-9]{4})([0-9]{2})([0-9]{2})\/([a-z_]+)\.tbz/
-for (const u of await getEPFList()) {
+for (const u of await getEPFList(type)) {
   let [m, collection, dateY, dateM, dateD, table] = rInfo.exec(u)
   const date = new Date(dateY, dateM-1, dateD)
-  const outFile = `data/epf/epf_type=update/epf_group=${collection}/epf_date=${date.getTime()/1000}/${table}.parquet`
+  const outFile = `data/epf/epf_type=${type}/epf_group=${collection}/epf_date=${date.getTime()/1000}/${table}.parquet`
   if (await exists(outFile)) {
     console.log(green('skipping'), outFile)
   } else {
-    console.log(green('downloading'), outFile)
-    console.log('')
+    console.log(green('\ndownloading'), outFile)
     try {
-      await getEpfFile(u, outFile)
+      await getEpfFileAsParquet(u, outFile)
     } catch (e) {
-      // No partial records
-      console.error(red('ERROR'), ':', e.message)
+      // No partial imports
+      console.error(red('\nERROR'), ':', e.message)
       await unlink(outFile)
     }
   }
