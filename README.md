@@ -31,6 +31,9 @@ You can do just parts of the process (using interim-files):
 # get info about the EPF files, on-disk
 ./files_info.js
 ./files_info.js data/epf/**/*.tbz
+
+# collect all, check them, then import in database
+./files_collect.js full && ./files_check.js && ./files_import.js
 ```
 
 ## using the database
