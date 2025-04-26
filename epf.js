@@ -1,167 +1,184 @@
-import { stat } from 'node:fs/promises'
-import { createWriteStream, createReadStream } from 'node:fs'
-import { Readable } from 'node:stream'
+// Library functions for turning EPF data into parquet files
+
+import { createReadStream } from 'node:fs'
+import { readFile }  from 'node:fs/promises'
+import { dirname } from 'node:path'
+import { Transform } from 'node:stream'
+import { mkdirSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+
 import bz2 from 'unbzip2-stream'
 import split from 'split2'
-import { basename } from 'node:path'
+import parquetjs from 'parquetjs'
+import { PassThrough } from 'node:stream'
 
-import * as cheerio from 'cheerio'
-import cliProgress from 'cli-progress'
-
-const { EPF_USERNAME, EPF_PASSWORD } = process.env
-
-if (!EPF_USERNAME || !EPF_PASSWORD) {
-  console.error('EPF_USERNAME && EPF_PASSWORD are required.')
-  process.exit(1)
+// check a single file with md5 file next to it
+export async function md5check(filePath) {
+  const check = (await readFile(`${filePath}.md5`, 'utf8')).split(' = ').pop().trim()
+  const hash = createHash('md5')
+  for await (const chunk of createReadStream(filePath)) {
+    hash.update(chunk)
+  }
+  return hash.digest('hex') === check
 }
 
-// simply check if file exists
-export const exists = async (path) => {
-  try {
-    await stat(path)
-    return true
-  } catch (e) {
-    return false
-  }
-}
+// Create a stream that reads EPF data and emits structured objects
+export function createEpfStream(filename) {
+  let headerProcessed = false
+  let lineCount = 0
+  const info = {}
 
-// fetch function to show progress
-const showProgress = (progress) => (r) => {
-  if (!r.ok) {
-    throw Error(r.status + ' ' + r.statusText)
-  }
+  // Create transform stream that processes the EPF file
+  const transform = new Transform({
+    objectMode: true,
 
-  if (!r.body) {
-    throw Error('ReadableStream not yet supported here.')
-  }
-
-  const contentEncoding = r.headers.get('content-encoding')
-  const contentLength = r.headers.get(contentEncoding ? 'x-file-size' : 'content-length')
-  if (contentLength === null) {
-    throw Error('Response size header unavailable')
-  }
-
-  const total = parseInt(contentLength, 10)
-  let loaded = 0
-
-  return new Response(
-    new ReadableStream({
-      start(controller) {
-        const reader = r.body.getReader()
-
-        read()
-        function read() {
-          reader
-            .read()
-            .then(({ done, value }) => {
-              if (done) {
-                controller.close()
-                return
-              }
-              loaded += value.byteLength
-              progress({ loaded, total })
-              controller.enqueue(value)
-              read()
-            })
-            .catch((error) => {
-              console.error(error)
-              controller.error(error)
-            })
+    transform(chunk, encoding, callback) {
+      try {
+        const line = chunk.toString()
+        if (lineCount === 0) {
+          info.dbNames = line.split('#').pop().split('\x01')
+          lineCount++
+          return callback()
         }
+        if (line.startsWith('#')) {
+          const [key, data] = line.slice(1).split(':')
+          if (!key.startsWith('#')) {
+            info[key] = data.split('\x01')
+          }
+          lineCount++
+          return callback()
+        }
+        if (!headerProcessed) {
+          headerProcessed = true
+          transform.emit('schema', info)
+        }
+        if (line.trim() === '') {
+          return callback()
+        }
+        const values = line.split('\x01')
+        const row = {}
+        for (const name of info.dbNames) {
+          row[name] = null
+        }
+        for (let i = 0; i < info.dbNames.length && i < values.length; i++) {
+          const name = info.dbNames[i]
+          const type = info.dbTypes?.[i]
+          const value = values[i]
+
+          if (value === undefined || value === null || value === '') {
+            row[name] = null
+          } else if (type === 'BIGINT') {
+            try {
+              row[name] = parseInt(value, 10)
+              if (isNaN(row[name])) row[name] = null
+            } catch (e) {
+              row[name] = null
+            }
+          } else if (type === 'DATETIME') {
+            try {
+              row[name] = new Date(value)
+              if (isNaN(row[name].getTime())) row[name] = null
+            } catch (e) {
+              row[name] = null
+            }
+          } else {
+            row[name] = value
+          }
+        }
+        this.push(row)
+        lineCount++
+        callback()
+      } catch (err) {
+        callback(err)
       }
-    })
-  )
-}
-
-// Get an EPF url: either fetch-response, or download the file (stream to disk)
-export const get = (u, filename) => {
-  const bar = new cliProgress.SingleBar({ etaBuffer: 10000, format: '{bar} {percentage}% | {duration_formatted}/{eta_formatted}' }, cliProgress.Presets.shades_classic)
-  bar.start()
-
-  return fetch(`https://feeds.itunes.apple.com/feeds/epf/${u}`, {
-    headers: {
-      Authorization: 'Basic ' + btoa(EPF_USERNAME + ':' + EPF_PASSWORD)
     }
   })
-    .then(
-      showProgress(({ loaded, total }) => {
-        bar.total = total
-        if (total == loaded) {
-          bar.stop()
-        }
-        bar.update(loaded)
-      })
-    )
-    .then(async (r) => {
-      if (filename) {
-        const s = createWriteStream(filename)
-        if (!r.ok) {
-          s.close()
-          throw new Error(`Failed to fetch: ${r.status} ${r.statusText}`)
-        }
-        const nodeReadable = Readable.fromWeb(r.body)
-        await new Promise((resolve, reject) => {
-          nodeReadable.pipe(s)
-          nodeReadable.on('error', (err) => {
-            s.close()
-            reject(err)
-          })
-          s.on('finish', resolve)
-          s.on('error', reject)
-        })
-        return { success: true, filename }
-      } else {
-        return r
-      }
-    })
-}
 
-// get current list of tbz's
-export async function getList(u = 'v5/current/') {
-  const out = []
-  const $ = cheerio.load(await get(u).then((r) => r.text()))
-  for (const a of $('a')) {
-    if (!a.attribs.href.startsWith('?')) {
-      out.push(a.attribs.href)
-    }
-  }
-  return out
-}
-
-// create a stream that parses epf file (emitting info & record messages)
-export const createEpfParseStream = (filename, onlyInfo) => {
-  const fileStream = createReadStream(filename)
-  const info = { table: basename(filename, '.tbz'), grouping: filename.match(/(itunes|match|popularity|pricing)/)[1], lineCount: 0 }
-  let outtedInfo = false
-  const outPipe = fileStream
+  return createReadStream(filename)
     .pipe(bz2())
     .pipe(split('\x02\n'))
-    .on('data', (line) => {
-      if (info.lineCount++ === 0) {
-        const f = line.split('\x01')
-        info.dbNames = [f[0].split('#').pop(), ...f.slice(1)]
-      } else if (line.startsWith('#')) {
-        if (line.startsWith('#primaryKey:')) {
-          info.primaryKey = line.split(':').pop().split('\x01')
-        } else if (line.startsWith('#recordsWritten:')) {
-          // this is at the end of the file, so might not be in every read (if onlyInfo)
-          info.recordsWritten = parseInt(line.split(':').pop())
-        } else if (line.startsWith('#exportMode:')) {
-          info.exportMode = line.split(':').pop()
-        } else if (line.startsWith('#dbTypes:')) {
-          info.dbTypes = line.split(':').pop().split('\x01')
-        }
-      } else {
-        if (!outtedInfo) {
-          outPipe.emit('info', info)
-          outtedInfo = true
-        }
-        if (onlyInfo) {
-          outPipe.destroy()
-        } else {
-          outPipe.emit('record', line.split('\x01'))
-        }
+    .pipe(transform)
+}
+
+// Create a direct file-writing ParquetWriter
+export async function createParquetWriter(outputPath, info) {
+  const schemaDefinition = {}
+  for (let i = 0; i < info.dbNames.length; i++) {
+    const name = info.dbNames[i]
+    const type = info.dbTypes[i]
+    let parquetType
+    if (type === 'BIGINT') {
+      parquetType = { type: 'INT64', optional: true }
+    } else if (type === 'DATETIME') {
+      parquetType = { type: 'TIMESTAMP_MILLIS', optional: true }
+    } else {
+      parquetType = { type: 'UTF8', optional: true }
+    }
+    schemaDefinition[name] = parquetType
+  }
+  const schema = new parquetjs.ParquetSchema(schemaDefinition)
+  mkdirSync(dirname(outputPath), { recursive: true })
+  const writer = await parquetjs.ParquetWriter.openFile(schema, outputPath, {
+    compression: 'GZIP',
+    rowGroupSize: 100000
+  })
+  return { writer, schema }
+}
+
+// Process an EPF file and convert to Parquet
+export async function epfToParquet(inputFile, outPath) {
+  return new Promise((resolve, reject) => {
+    let writer = null
+    let rowCount = 0
+    let pendingWrites = Promise.resolve()
+    const epfStream = createEpfStream(inputFile)
+    const bufferStream = new PassThrough({ objectMode: true })
+    epfStream.on('schema', async (info) => {
+      try {
+        const result = await createParquetWriter(outPath, info)
+        writer = result.writer
+        bufferStream.resume()
+      } catch (err) {
+        epfStream.destroy(err)
+        reject(err)
       }
     })
-  return outPipe
+    bufferStream.pause()
+    bufferStream.on('data', (row) => {
+      if (!writer) {
+        return
+      }
+      rowCount++
+      pendingWrites = pendingWrites.then(async () => {
+        try {
+          await writer.appendRow(row)
+          if (rowCount % 10000 === 0) {
+            console.log(`Processed ${rowCount} rows`)
+          }
+        } catch (err) {
+          console.error('Error writing row:', err)
+          epfStream.destroy(err)
+        }
+      })
+    })
+
+    bufferStream.on('end', async () => {
+      try {
+        await pendingWrites
+        if (writer) {
+          await writer.close()
+        }
+        resolve({
+          path: outPath,
+          rowCount
+        })
+      } catch (err) {
+        reject(err)
+      }
+    })
+
+    epfStream.on('error', reject)
+    bufferStream.on('error', reject)
+    epfStream.pipe(bufferStream)
+  })
 }

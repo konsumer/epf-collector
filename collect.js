@@ -1,26 +1,13 @@
-// this grabs the initial collection (full dumps)
-// normally you would also do incremental once a week
+#!/usr/bin/env node
 
-import { writeFile, mkdir } from 'node:fs/promises'
-import { get, getList, exists } from './epf.js'
+// This grabs EPF data and inserts it into database
+// normally you would also do update once a week
+// and full only once, initially
 
-const [, , outDir = 'data/epf/full'] = process.argv
-
-// get all the full dumps
-console.log('Getting full collections...')
-for (const collection of await getList()) {
-  if (collection !== 'incremental/') {
-    console.log(collection)
-    const files = await getList(`v5/current/${collection}`)
-    for (const file of files) {
-      const fe = await exists(`${outDir}/${collection}${file}`)
-      try {
-        await mkdir(`${outDir}/${collection}`, { recursive: true })
-      } catch (e) {}
-      console.log(`  ${outDir}/${collection}${file}: ${fe ? 'exists' : 'downloading'}`)
-      if (!fe) {
-        await get(`v5/current/${collection}${file}`, `${outDir}/${collection}${file}`)
-      }
-    }
-  }
+let [,,type='update', outputDir='data/parquet', ...groups] = process.argv
+if (!groups.length) {
+  groups = ['itunes', 'match', 'popularity', 'pricing']
 }
+
+console.log('TODO')
+console.log({type, outputDir, groups})
