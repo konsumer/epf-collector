@@ -312,12 +312,15 @@ export async function duckImportFile(file, outFileName = ':memory:') {
 }
 
 // example update
-const type = 'full'
-const skipTables = []
+const type = 'update'
+const skipTables = ['video_pricing']
 const dbFile='data/epf.duckdb'
 
+// this tracks the urls that were downloaded on 1st pass
+const filesforInsert = []
+
 const rInfo = /([a-z_]+)([0-9]{4})([0-9]{2})([0-9]{2})\/([a-z_]+)\.tbz/
-for (const u of urls) {
+for (const u of await getEPFList(type)) {
   let [m, collection, dateY, dateM, dateD, table] = rInfo.exec(u)
   const date = new Date(dateY, dateM - 1, dateD)
   const outFile = `data/epf/${type}/${date.getTime() / 1000}/${collection}/${table}.tbz`
@@ -331,6 +334,8 @@ for (const u of urls) {
     process.stdout.write(outFile + '\n')
     continue
   }
+
+  filesforInsert.push(u)
 
   if (await exists(outFile)) {
     console.log(yellow('skipping'), '(exists)', outFile)
@@ -364,8 +369,8 @@ for (const u of urls) {
   }
 }
 
-// 2nd pass: import to database
-for (const u of urls) {
+// 2nd pass: import existing files to database
+for (const u of filesforInsert) {
   let [m, collection, dateY, dateM, dateD, table] = rInfo.exec(u)
   const date = new Date(dateY, dateM - 1, dateD)
   const outFile = `data/epf/${type}/${date.getTime() / 1000}/${collection}/${table}.tbz`
