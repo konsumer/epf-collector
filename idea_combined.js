@@ -313,7 +313,7 @@ export async function duckImportFile(file, outFileName = ':memory:') {
 
 // example update
 const type = 'update'
-const skipTables = ['video_pricing']
+const skipTables = ['video_price']
 const dbFile='data/epf.duckdb'
 
 // this tracks the urls that were downloaded on 1st pass
