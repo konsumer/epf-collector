@@ -335,6 +335,7 @@ for (const u of await getEPFList(type)) {
     continue
   }
 
+  // I do this after skipped, so I only import the current dump
   filesforInsert.push(u)
 
   if (await exists(outFile)) {
@@ -345,8 +346,6 @@ for (const u of await getEPFList(type)) {
     } else {
       console.log(green('verified'), outFile)
     }
-    console.log(green('importing'), outFile)
-    await duckImportFile(outFile, dbFile)
   } else {
     console.log(green('\ndownloading\n'), outFile)
     try {
@@ -356,8 +355,6 @@ for (const u of await getEPFList(type)) {
       } else {
         console.log(green('\nverified'), outFile)
       }
-      console.log(green('importing'), outFile)
-      await duckImportFile(outFile, dbFile)
     } catch (e) {
       // No partial imports
       // TODO: I get a lot of "Terminated" errors on full + getEpfFileAsParquet, so I download, then parse in another step
