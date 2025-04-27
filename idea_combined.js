@@ -2,7 +2,7 @@ import { createReadStream, createWriteStream } from 'node:fs'
 import { mkdir, stat, unlink, readFile, writeFile } from 'node:fs/promises'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import { dirname, basename} from 'node:path'
+import { dirname, basename } from 'node:path'
 import { createHash } from 'node:crypto'
 import parquet from 'parquetjs'
 
@@ -25,7 +25,7 @@ if (!EPF_USERNAME || !EPF_PASSWORD) {
 }
 
 // check if a file exists
-export const exists = async f => {
+export const exists = async (f) => {
   try {
     await stat(f)
     return true
@@ -157,11 +157,17 @@ function createParquetStream(filename) {
         parquet.ParquetWriter.openFile(new parquet.ParquetSchema(s), filename).then((w) => {
           writer = w
           if (row) {
-            writer.appendRow(row).then(() => callback()).catch(e => callback(e))
+            writer
+              .appendRow(row)
+              .then(() => callback())
+              .catch((e) => callback(e))
           }
         })
       } else {
-        writer.appendRow(row).then(() => callback()).catch(e => callback(e))
+        writer
+          .appendRow(row)
+          .then(() => callback())
+          .catch((e) => callback(e))
       }
     }
   })
@@ -214,7 +220,7 @@ export async function getEpfFileAsLocal(u, outFilename, getMd5) {
   const out = createWriteStream(outFilename)
 
   if (getMd5) {
-    const d = await fetch(`https://feeds.itunes.apple.com/feeds/epf/v5/current${u}.md5`, options).then(r => r.text())
+    const d = await fetch(`https://feeds.itunes.apple.com/feeds/epf/v5/current${u}.md5`, options).then((r) => r.text())
     await writeFile(`${outFilename}.md5`, d)
   }
 
@@ -240,10 +246,14 @@ async function createDuckStream(tableName, outFileName = ':memory:') {
         if (chunk?.primaryKey?.length) {
           p = `, UNIQUE(${chunk.primaryKey.join(', ')})`
         }
-        const sqlCreate = `CREATE TABLE IF NOT EXISTS ${tableName} (${Object.keys(chunk.types).map(k => `${k} ${chunk.types[k]}`).join(', ')}${p});`
-        const sqlInsert = `INSERT INTO ${tableName} VALUES (${Object.keys(chunk.types).map(() => '?').join(', ')});`
+        const sqlCreate = `CREATE TABLE IF NOT EXISTS ${tableName} (${Object.keys(chunk.types)
+          .map((k) => `${k} ${chunk.types[k]}`)
+          .join(', ')}${p});`
+        const sqlInsert = `INSERT OR REPLACE INTO ${tableName} VALUES (${Object.keys(chunk.types)
+          .map(() => '?')
+          .join(', ')});`
 
-        db.exec(sqlCreate, e1 => {
+        db.exec(sqlCreate, (e1) => {
           if (e1) {
             return callback(e1)
           }
@@ -265,15 +275,16 @@ async function createDuckStream(tableName, outFileName = ':memory:') {
   })
 
   ducker.on('finish', () => {
-    console.log('DUCKER OUT')
     if (stmt) {
       stmt.finalize()
     }
-    db.close()
+    if (db) {
+      db.close()
+    }
   })
 
   return new Promise((resolve, reject) => {
-    db = new duckdb.Database(outFileName, err => {
+    db = new duckdb.Database(outFileName, (err) => {
       if (err) {
         return reject(err)
       } else {
@@ -283,9 +294,8 @@ async function createDuckStream(tableName, outFileName = ':memory:') {
   })
 }
 
-
 // given a tbz file, this will UPSERT all records
-export async function duckImportFile(file, outFileName=':memory:') {
+export async function duckImportFile(file, outFileName = ':memory:') {
   const src = createReadStream(file)
   const bunzip = bz2()
   const splitter = split('\x02\n')
@@ -296,13 +306,20 @@ export async function duckImportFile(file, outFileName=':memory:') {
 }
 
 // example update
-const type ='full'
+const type = 'full'
 const skipTables = []
+
+// I do it in 2 passes
+
+const urls = await getEPFList(type)
+
+// first pass: download all EPF data locally
+
 const rInfo = /([a-z_]+)([0-9]{4})([0-9]{2})([0-9]{2})\/([a-z_]+)\.tbz/
-for (const u of await getEPFList(type)) {
+for (const u of urls) {
   let [m, collection, dateY, dateM, dateD, table] = rInfo.exec(u)
-  const date = new Date(dateY, dateM-1, dateD)
-  const outFile = `data/epf/${type}/${date.getTime()/1000}/${collection}/${table}.tbz`
+  const date = new Date(dateY, dateM - 1, dateD)
+  const outFile = `data/epf/${type}/${date.getTime() / 1000}/${collection}/${table}.tbz`
 
   if (skipTables.includes(table)) {
     process.stdout.write(yellow('skipping') + ' (from skip-tables) ')
@@ -323,7 +340,6 @@ for (const u of await getEPFList(type)) {
       console.log(green('verified'), outFile)
     }
     console.log(green('importing'), outFile)
-    await duckImportFile(outFile)
   } else {
     console.log(green('\ndownloading\n'), outFile)
     try {
@@ -333,8 +349,6 @@ for (const u of await getEPFList(type)) {
       } else {
         console.log(green('\nverified'), outFile)
       }
-      console.log(green('importing'), outFile)
-      await duckImportFile(outFile)
     } catch (e) {
       // No partial imports
       // TODO: I get a lot of "Terminated" errors on full + getEpfFileAsParquet, so I download, then parse in another step
@@ -344,4 +358,14 @@ for (const u of await getEPFList(type)) {
       await unlink(outFile)
     }
   }
+}
+
+// 2nd pass: import to database
+for (const u of urls) {
+  let [m, collection, dateY, dateM, dateD, table] = rInfo.exec(u)
+  const date = new Date(dateY, dateM - 1, dateD)
+  const outFile = `data/epf/${type}/${date.getTime() / 1000}/${collection}/${table}.tbz`
+
+  console.log(green('importing'), outFile)
+  await duckImportFile(outFile, 'data/epf.duckdb')
 }
