@@ -238,6 +238,20 @@ async function createDuckStream(tableName, outFileName = ':memory:') {
   let db
   let stmt
 
+  // console.log({ tableName, outFileName  })
+
+  const insertRecord = (chunk, cb) => {
+    if (!stmt) {
+      return cb('Statement not setup.')
+    }
+    if (chunk.row) {
+      // console.log(`INSERT: ${Object.values(chunk.row).join(', ')}`)
+      stmt.run(...Object.values(chunk.row), cb)
+    } else {
+      cb()
+    }
+  }
+
   const ducker = new Transform({
     objectMode: true,
     transform(chunk, encoding, callback) {
@@ -258,18 +272,10 @@ async function createDuckStream(tableName, outFileName = ':memory:') {
             return callback(e1)
           }
           stmt = db.prepare(sqlInsert)
-          if (chunk.row) {
-            stmt.run(...Object.values(chunk.row), callback)
-          } else {
-            callback()
-          }
+          insertRecord(chunk, callback)
         })
       } else {
-        if (chunk.row) {
-          stmt.run(...Object.values(chunk.row), callback)
-        } else {
-          callback()
-        }
+        insertRecord(chunk, callback)
       }
     }
   })
@@ -308,12 +314,7 @@ export async function duckImportFile(file, outFileName = ':memory:') {
 // example update
 const type = 'full'
 const skipTables = []
-
-// I do it in 2 passes
-
-const urls = await getEPFList(type)
-
-// first pass: download all EPF data locally
+const dbFile='data/epf.duckdb'
 
 const rInfo = /([a-z_]+)([0-9]{4})([0-9]{2})([0-9]{2})\/([a-z_]+)\.tbz/
 for (const u of urls) {
@@ -340,6 +341,7 @@ for (const u of urls) {
       console.log(green('verified'), outFile)
     }
     console.log(green('importing'), outFile)
+    await duckImportFile(outFile, dbFile)
   } else {
     console.log(green('\ndownloading\n'), outFile)
     try {
@@ -349,6 +351,8 @@ for (const u of urls) {
       } else {
         console.log(green('\nverified'), outFile)
       }
+      console.log(green('importing'), outFile)
+      await duckImportFile(outFile, dbFile)
     } catch (e) {
       // No partial imports
       // TODO: I get a lot of "Terminated" errors on full + getEpfFileAsParquet, so I download, then parse in another step
