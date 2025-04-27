@@ -10,7 +10,7 @@ import split from 'split2'
 import * as cheerio from 'cheerio'
 
 import { sqlTypesToParquetSchema, mapValues } from './type_manipulation.js'
-import { green, red, yellow, blue } from './colors.js'
+import { green, red, yellow } from './colors.js'
 
 const { EPF_USERNAME, EPF_PASSWORD } = process.env
 
@@ -141,10 +141,12 @@ function createParquetStream(filename) {
         }
         parquet.ParquetWriter.openFile(new parquet.ParquetSchema(s), filename).then((w) => {
           writer = w
-          callback()
+          if (row) {
+            writer.appendRow(row).then(() => callback()).catch(e => callback(e))
+          }
         })
       } else {
-        writer.appendRow(row).then(() => callback())
+        writer.appendRow(row).then(() => callback()).catch(e => callback(e))
       }
     }
   })
@@ -186,11 +188,22 @@ export async function getEpfFileAsParquet(u, outFilename) {
 
 // example update
 const type ='full'
+const skipTables = ['video_price']
 const rInfo = /([a-z_]+)([0-9]{4})([0-9]{2})([0-9]{2})\/([a-z_]+)\.tbz/
 for (const u of await getEPFList(type)) {
   let [m, collection, dateY, dateM, dateD, table] = rInfo.exec(u)
   const date = new Date(dateY, dateM-1, dateD)
   const outFile = `data/epf/epf_type=${type}/epf_group=${collection}/epf_date=${date.getTime()/1000}/${table}.parquet`
+
+  if (skipTables.includes(table)) {
+    console.log(green('skipping (from skipped-tables)'), outFile)
+    if (await exists(outFile)) {
+      process.stdout.write(green('(deleting)'))
+      await unlink(outFile)
+    }
+    continue
+  }
+
   if (await exists(outFile)) {
     console.log(green('skipping'), outFile)
   } else {
@@ -199,6 +212,9 @@ for (const u of await getEPFList(type)) {
       await getEpfFileAsParquet(u, outFile)
     } catch (e) {
       // No partial imports
+      // TODO: I get a lot of "Terminated" errors. I might need to download then parse
+      // TODO: it'd be cool if it kept a bin-log with partial download-support
+      // TODO: it'd be cool if it MD5 verified
       console.error(red('\nERROR'), ':', e.message)
       await unlink(outFile)
     }
