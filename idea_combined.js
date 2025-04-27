@@ -1,7 +1,9 @@
+import { createReadStream, createWriteStream } from 'node:fs'
+import { mkdir, stat, unlink, readFile, writeFile } from 'node:fs/promises'
 import { Readable, Transform } from 'node:stream'
-import { mkdir, stat, unlink } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { dirname } from 'node:path'
+import { createHash } from 'node:crypto'
 import parquet from 'parquetjs'
 
 import progress from 'progress-stream'
@@ -27,6 +29,16 @@ export const exists = async f => {
   } catch (e) {
     return false
   }
+}
+
+// check a single file with md5 file next to it
+export async function md5check(filePath) {
+  const check = (await readFile(`${filePath}.md5`, 'utf8')).split(' = ').pop().trim()
+  const hash = createHash('md5')
+  for await (const chunk of createReadStream(filePath)) {
+    hash.update(chunk)
+  }
+  return hash.digest('hex') === check
 }
 
 // create a node stream from fetch
@@ -168,6 +180,7 @@ function createDebugStream() {
 }
 
 // wrapper to import an EPF file (show progress, parse, output parquet)
+// I think I will need to stream-to-disk first (for resume and less errors on full imports) so this is more for an example
 export async function getEpfFileAsParquet(u, outFilename) {
   const options = {
     headers: {
@@ -180,42 +193,79 @@ export async function getEpfFileAsParquet(u, outFilename) {
   const bunzip = bz2()
   const splitter = split('\x02\n')
   const parser = createEPFParserStream()
-  const debug = createDebugStream()
   const parq = createParquetStream(outFilename)
 
   await pipeline(web, prog, bunzip, splitter, parser, parq)
 }
 
+// this will download an EPF file with progress
+export async function getEpfFileAsLocal(u, outFilename, getMd5) {
+  const options = {
+    headers: {
+      Authorization: `Basic ${btoa(`${EPF_USERNAME}:${EPF_PASSWORD}`)}`
+    }
+  }
+  await mkdir(dirname(outFilename), { recursive: true })
+  const web = await createFetchStream(`https://feeds.itunes.apple.com/feeds/epf/v5/current${u}`, options)
+  const prog = createRequestProgessStream(web.response)
+  const out = createWriteStream(outFilename)
+
+  if (getMd5) {
+    const d = await fetch(`https://feeds.itunes.apple.com/feeds/epf/v5/current${u}.md5`, options).then(r => r.text())
+    await writeFile(`${outFilename}.md5`, d)
+  }
+
+  await pipeline(web, prog, out)
+
+  if (getMd5) {
+    return await md5check(outFilename)
+  }
+
+  return undefined
+}
+
 // example update
-const type ='full'
+const type ='update'
 const skipTables = ['video_price']
 const rInfo = /([a-z_]+)([0-9]{4})([0-9]{2})([0-9]{2})\/([a-z_]+)\.tbz/
 for (const u of await getEPFList(type)) {
   let [m, collection, dateY, dateM, dateD, table] = rInfo.exec(u)
   const date = new Date(dateY, dateM-1, dateD)
-  const outFile = `data/epf/epf_type=${type}/epf_group=${collection}/epf_date=${date.getTime()/1000}/${table}.parquet`
+  const outFile = `data/epf/${type}/${date.getTime()/1000}/${collection}/${table}.tbz`
 
   if (skipTables.includes(table)) {
-    console.log(green('skipping (from skipped-tables)'), outFile)
+    process.stdout.write(yellow('skipping') + ' (from skip-tables) ')
     if (await exists(outFile)) {
-      process.stdout.write(green('(deleting)'))
+      process.stdout.write(green('& deleting '))
       await unlink(outFile)
     }
+    process.stdout.write(outFile + '\n')
     continue
   }
 
   if (await exists(outFile)) {
-    console.log(green('skipping'), outFile)
+    console.log(yellow('skipping'), '(exists)', outFile)
+    const check = await md5check(outFile)
+    if (check !== true) {
+      throw new Error('MD5 check failed')
+    } else {
+      console.log(green('verified'), outFile)
+    }
   } else {
     console.log(green('\ndownloading'), outFile)
     try {
-      await getEpfFileAsParquet(u, outFile)
+      const check = await getEpfFileAsLocal(u, outFile, true)
+      if (check !== true) {
+        throw new Error('MD5 check failed')
+      } else {
+        console.log(green('verified'), outFile)
+      }
     } catch (e) {
       // No partial imports
-      // TODO: I get a lot of "Terminated" errors. I might need to download then parse
+      // TODO: I get a lot of "Terminated" errors on full + getEpfFileAsParquet, so I download, then parse in another step
       // TODO: it'd be cool if it kept a bin-log with partial download-support
-      // TODO: it'd be cool if it MD5 verified
-      console.error(red('\nERROR'), ':', e.message)
+      // TODO: it'd be cool if it MD5 verified from apple
+      console.error(red('\nERROR'), '', outFile, ' :', e.message)
       await unlink(outFile)
     }
   }
