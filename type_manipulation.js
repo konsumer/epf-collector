@@ -112,7 +112,7 @@ const convertValue = (value, type) => {
     case 'DATE':
     case 'TIME_MILLIS':
     case 'TIMESTAMP_MILLIS':
-      return value ? new Date(value).getTime() : 0
+      return new Date(value || 0)
     case 'BYTE_ARRAY':
       return Buffer.from(value, 'base64')
     default:

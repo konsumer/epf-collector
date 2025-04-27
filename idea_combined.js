@@ -2,9 +2,12 @@ import { createReadStream, createWriteStream } from 'node:fs'
 import { mkdir, stat, unlink, readFile, writeFile } from 'node:fs/promises'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import { dirname } from 'node:path'
+import { dirname, basename} from 'node:path'
 import { createHash } from 'node:crypto'
 import parquet from 'parquetjs'
+
+// it's depracated, but the callbacks work better with streams
+import duckdb from 'duckdb'
 
 import progress from 'progress-stream'
 import bz2 from 'unbzip2-stream'
@@ -56,11 +59,11 @@ export async function createFetchStream(url, options = {}) {
 }
 
 // get a stream to show fetch/stream progress
-export const createRequestProgessStream = (response) => {
+export const createRequestProgessStream = (length) => {
   const spinner = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
   let t = 0
   const p = progress({
-    length: parseInt(response.headers.get('content-length') || 0),
+    length,
     time: 500
   })
   p.on('progress', ({ percentage, transferred, length, remaining, eta, runtime, delta, speed }) => {
@@ -180,7 +183,7 @@ function createDebugStream() {
 }
 
 // wrapper to import an EPF file (show progress, parse, output parquet)
-// I think I will need to stream-to-disk first (for resume and less errors on full imports) so this is more for an example
+// I will need to stream-to-disk first (for resume and less errors on full imports) so this is more for an example
 export async function getEpfFileAsParquet(u, outFilename) {
   const options = {
     headers: {
@@ -189,7 +192,7 @@ export async function getEpfFileAsParquet(u, outFilename) {
   }
   await mkdir(dirname(outFilename), { recursive: true })
   const web = await createFetchStream(`https://feeds.itunes.apple.com/feeds/epf/v5/current${u}`, options)
-  const prog = createRequestProgessStream(web.response)
+  const prog = createRequestProgessStream(parseInt(web.response.headers.get('content-length')))
   const bunzip = bz2()
   const splitter = split('\x02\n')
   const parser = createEPFParserStream()
@@ -207,7 +210,7 @@ export async function getEpfFileAsLocal(u, outFilename, getMd5) {
   }
   await mkdir(dirname(outFilename), { recursive: true })
   const web = await createFetchStream(`https://feeds.itunes.apple.com/feeds/epf/v5/current${u}`, options)
-  const prog = createRequestProgessStream(web.response)
+  const prog = createRequestProgessStream(parseInt(web.response.headers.get('content-length')))
   const out = createWriteStream(outFilename)
 
   if (getMd5) {
@@ -224,9 +227,77 @@ export async function getEpfFileAsLocal(u, outFilename, getMd5) {
   return undefined
 }
 
+// creates a stream that receives records/structure (from createEPFParserStream) and imports to database
+async function createDuckStream(tableName, outFileName = ':memory:') {
+  let db
+  let stmt
+
+  const ducker = new Transform({
+    objectMode: true,
+    transform(chunk, encoding, callback) {
+      if (!stmt) {
+        let p = ''
+        if (chunk?.primaryKey?.length) {
+          p = `, UNIQUE(${chunk.primaryKey.join(', ')})`
+        }
+        const sqlCreate = `CREATE TABLE IF NOT EXISTS ${tableName} (${Object.keys(chunk.types).map(k => `${k} ${chunk.types[k]}`).join(', ')}${p});`
+        const sqlInsert = `INSERT INTO ${tableName} VALUES (${Object.keys(chunk.types).map(() => '?').join(', ')});`
+
+        db.exec(sqlCreate, e1 => {
+          if (e1) {
+            return callback(e1)
+          }
+          stmt = db.prepare(sqlInsert)
+          if (chunk.row) {
+            stmt.run(...Object.values(chunk.row), callback)
+          } else {
+            callback()
+          }
+        })
+      } else {
+        if (chunk.row) {
+          stmt.run(...Object.values(chunk.row), callback)
+        } else {
+          callback()
+        }
+      }
+    }
+  })
+
+  ducker.on('finish', () => {
+    console.log('DUCKER OUT')
+    if (stmt) {
+      stmt.finalize()
+    }
+    db.close()
+  })
+
+  return new Promise((resolve, reject) => {
+    db = new duckdb.Database(outFileName, err => {
+      if (err) {
+        return reject(err)
+      } else {
+        resolve(ducker)
+      }
+    })
+  })
+}
+
+
+// given a tbz file, this will UPSERT all records
+export async function duckImportFile(file, outFileName=':memory:') {
+  const src = createReadStream(file)
+  const bunzip = bz2()
+  const splitter = split('\x02\n')
+  const parser = createEPFParserStream()
+  const ducker = await createDuckStream(basename(file, '.tbz'), outFileName)
+
+  return await pipeline(src, bunzip, splitter, parser, ducker)
+}
+
 // example update
-const type ='update'
-const skipTables = ['video_price']
+const type ='full'
+const skipTables = []
 const rInfo = /([a-z_]+)([0-9]{4})([0-9]{2})([0-9]{2})\/([a-z_]+)\.tbz/
 for (const u of await getEPFList(type)) {
   let [m, collection, dateY, dateM, dateD, table] = rInfo.exec(u)
@@ -251,15 +322,19 @@ for (const u of await getEPFList(type)) {
     } else {
       console.log(green('verified'), outFile)
     }
+    console.log(green('importing'), outFile)
+    await duckImportFile(outFile)
   } else {
-    console.log(green('\ndownloading'), outFile)
+    console.log(green('\ndownloading\n'), outFile)
     try {
       const check = await getEpfFileAsLocal(u, outFile, true)
       if (check !== true) {
         throw new Error('MD5 check failed')
       } else {
-        console.log(green('verified'), outFile)
+        console.log(green('\nverified'), outFile)
       }
+      console.log(green('importing'), outFile)
+      await duckImportFile(outFile)
     } catch (e) {
       // No partial imports
       // TODO: I get a lot of "Terminated" errors on full + getEpfFileAsParquet, so I download, then parse in another step
