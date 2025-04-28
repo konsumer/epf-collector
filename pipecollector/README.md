@@ -23,9 +23,5 @@ md5sum -c application_detail.tbz.md5
 tar --strip-components=1 -xjf application_detail.tbz
 
 # parse
-../epftoparquet application_detail application_detail.parquet < application_detail
-
-
-# OR extract & parse
-tar -Oxjf application_detail.tbz '*/application_detail' | ../epftoparquet application_detail application_detail.parquet
+cat  application_detail | ../epftoparquet application_detail > application_detail.parquet
 ```
