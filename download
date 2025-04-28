@@ -1,0 +1,40 @@
+#!/usr/bin/env node
+
+// Collect/check current EPF files
+
+import { mkdir, unlink } from 'node:fs/promises'
+import { dirname } from 'node:path'
+import chalk from 'chalk'
+
+import { getEPFList, getEpfFileAsLocal } from './lib/remote.js'
+import { exists, md5check } from './lib/fs.js'
+
+const { green, yellow, red } = chalk
+
+const [, , type = 'update', outDir = 'data/epf'] = process.argv
+
+if (type === '--help') {
+  console.log('Usage: download [type:update|full] [outDir=data/epf]')
+  process.exit(0)
+}
+
+for (const { group, table, date, url } of await getEPFList(type)) {
+  const epfFile = `${outDir}/${type}/${date.getTime() / 1000}/${group}/${table}.tbz`
+  const name = `${group}.${table}`
+  let ok
+  if (await exists(epfFile)) {
+    ok = await md5check(epfFile)
+  } else {
+    console.log(yellow('download'), name)
+    await mkdir(dirname(epfFile), { recursive: true })
+    ok = await getEpfFileAsLocal(url, epfFile, true)
+  }
+  if (ok) {
+    console.log(green('ok'), name)
+  } else {
+    console.log(red('bad'), name)
+    try {
+      unlink(epfFile)
+    } catch (e) {}
+  }
+}

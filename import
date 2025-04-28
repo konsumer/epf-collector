@@ -1,0 +1,24 @@
+#!/usr/bin/env node
+
+// Import EPF files into database
+
+import { glob } from 'glob'
+import chalk from 'chalk'
+
+import { importEPF } from './lib/sql.js'
+
+const { green, yellow, red } = chalk
+
+const [, , inDir = 'data/epf', outFile = 'data/epf.sqlite'] = process.argv
+
+if (inDir === '--help') {
+  console.log('Usage: import [inDir=data/epf] [outFile=data/epf.sqlite]')
+  process.exit(0)
+}
+
+for (const epfFile of await glob(`${inDir}/**/*.tbz`)) {
+  const [m, d, group, table] = /([0-9]+)\/([a-z]+)\/([a-z_]+)\.tbz/.exec(epfFile.replace(inDir, ''))
+  const name = `${group}.${table}`
+  console.log(yellow('import'), name)
+  await importEPF(outFile, table, epfFile)
+}
