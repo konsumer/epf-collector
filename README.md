@@ -8,7 +8,7 @@ export EPF_PASSWORD=your_password
 
 There are 2 stages:
 
-- `./download` Download current EPF files
-- `./import` Check all files and import into database
+- `./download` Download and check current EPF files
+- `./import` import EPF downloaded files into database
 
 Run each with `--help` for more information.
