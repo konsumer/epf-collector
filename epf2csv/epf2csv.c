@@ -3,11 +3,11 @@
 #include <string.h>
 #include <stdbool.h>
 
-#define MAX_LINE_SIZE 100000  // Increased buffer size
+#define MAX_LINE_SIZE 100000
 #define MAX_FIELDS 1000
-#define FIELD_SEPARATOR 0x01  /* \x01 */
-#define ROW_DELIMITER_1 0x02  /* \x02 */
-#define ROW_DELIMITER_2 '\n'  /* \n */
+#define FIELD_SEPARATOR 0x01
+#define ROW_DELIMITER_1 0x02
+#define ROW_DELIMITER_2 '\n'
 
 void output_csv_field(const char *field) {
     bool needs_quotes = false;
@@ -119,13 +119,6 @@ int main() {
                 // Continue collecting characters but don't store them
             }
         }
-    }
-
-    // Process any remaining data in the buffer if needed
-    if (pos > 0) {
-        buffer[pos] = '\0';
-        fprintf(stderr, "Warning: Input did not end with proper row delimiter\n");
-        // Could process the last row here if needed
     }
 
     return 0;
