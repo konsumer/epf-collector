@@ -23,5 +23,5 @@ There are 2 stages:
 # STAGE 2
 
 # take current files and insert in duckdb
-./import data/epf/full/**/*.tbz
+./import
 ```
