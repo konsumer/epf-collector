@@ -8,5 +8,5 @@ for file in $(find data/epf -name '*.tbz'); do
   table=$(basename "${file}" .tbz)
   echo "Importing ${table}"
   node ./lib/sql.js $table | duckdb data/epf.duckdb
-  bunzip2 -c "${file}" | node ./lib/epf2csv.js # | duckdb data/epf.duckdb -c "INSERT INTO ${table} SELECT * FROM read_csv('/dev/stdin', header=true);"
+  bunzip2 -c "${file}" | node ./lib/epf2csv.js | duckdb data/epf.duckdb -c "INSERT INTO ${table} SELECT * FROM read_csv('/dev/stdin', header=true);"
 done
