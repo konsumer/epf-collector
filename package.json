@@ -5,12 +5,9 @@
   "type": "module",
   "author": "konsumer",
   "dependencies": {
-    "better-sqlite3": "^11.9.1",
     "chalk": "^5.4.1",
     "cheerio": "^1.0.0",
-    "glob": "^11.0.2",
     "progress-stream": "^2.0.0",
-    "split2": "^4.2.0",
-    "unbzip2-stream": "^1.4.3"
+    "split2": "^4.2.0"
   }
 }

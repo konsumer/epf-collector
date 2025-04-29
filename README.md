@@ -8,7 +8,15 @@ export EPF_PASSWORD=your_password
 
 There are 2 stages:
 
-- `./download` Download and check current EPF files
-- `./import` import EPF downloaded files into database
+```
+# collect current "update" (incremental)
+./download
 
-Run each with `--help` for more information.
+# or
+
+# collect current "full"
+./download full
+
+# take current files and insert in duckdb
+./import data/epf/full/**/*.tbz
+```
