@@ -8,7 +8,7 @@ export EPF_PASSWORD=your_password
 
 There are 2 stages:
 
-```
+```bash
 # STAGE 1
 
 # collect current "update" (incremental)

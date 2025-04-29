@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Very simple import script that leverages bunzip2 unix-command and duckdb CLI to import, streaming
+
 set -e
 
 for file in $*; do
