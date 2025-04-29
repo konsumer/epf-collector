@@ -46,6 +46,7 @@ int main() {
     int pos = 0;
     int ch;
     bool prev_was_delimiter1 = false;
+    bool first_comment_processed = false;
 
     while ((ch = getchar()) != EOF) {
         // Check for row delimiter sequence (\x02\n)
@@ -55,8 +56,48 @@ int main() {
             if (pos > 0) pos--; // Remove the \x02 character
             buffer[pos] = '\0';
 
-            // Skip comment lines
+            // Handle comment lines
             if (buffer[0] == '#') {
+                // Process only the first comment line as header
+                if (!first_comment_processed) {
+                    first_comment_processed = true;
+
+                    // Skip the '#' character and any spaces after it
+                    char *header_start = buffer + 1;
+                    while (*header_start == ' ' || *header_start == '\t') {
+                        header_start++;
+                    }
+
+                    // Parse header fields
+                    int field_count = 0;
+                    fields[field_count++] = header_start;
+
+                    for (int i = 0; header_start[i]; i++) {
+                        if (header_start[i] == FIELD_SEPARATOR) {
+                            header_start[i] = '\0';
+                            fields[field_count++] = &header_start[i + 1];
+                            if (field_count >= MAX_FIELDS) {
+                                fprintf(stderr, "Too many fields in header\n");
+                                break;
+                            }
+                        }
+                    }
+
+                    // Track maximum number of fields
+                    if (field_count > max_fields) {
+                        max_fields = field_count;
+                    }
+
+                    // Output headers as CSV
+                    for (int i = 0; i < field_count; i++) {
+                        if (i > 0) {
+                            putchar(',');
+                        }
+                        output_csv_field(fields[i]);
+                    }
+                    putchar('\n');
+                }
+
                 pos = 0;
                 prev_was_delimiter1 = false;
                 continue;
