@@ -2,9 +2,13 @@
 
 # Very simple import script that leverages bunzip2 unix-command and duckdb CLI to import, streaming
 
-for file in $(find data/epf -name '*.tbz'); do
+epf_dir=${1:-"data/epf"}
+
+echo Importing $epf_dir
+
+for file in $(find "${epf_dir}" -name '*.tbz'); do
   table=$(basename "${file}" .tbz)
-  echo "Importing ${table}"
+  echo "  ${table}"
   node ./lib/sql.js $table | duckdb data/epf.duckdb
-  bunzip2 -c "${file}" | node ./lib/epf2csv.js | duckdb data/epf.duckdb -c "INSERT OR REPLACE INTO ${table} SELECT * FROM read_csv('/dev/stdin', header=true, nullstr='');"
+  bunzip2 -c "${file}" #| node ./lib/epf2csv.js # | duckdb data/epf.duckdb -c "INSERT OR REPLACE INTO ${table} SELECT * FROM read_csv('/dev/stdin', header=true, nullstr='');"
 done
