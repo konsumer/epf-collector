@@ -11,14 +11,22 @@ import { exists, md5check } from './lib/fs.js'
 
 const { green, yellow, red } = chalk
 
-const [, , type = 'update', outDir = 'data/epf'] = process.argv
+const [, , type = 'full', outDir = 'data/epf'] = process.argv
 
 if (type === '--help') {
   console.log('Usage: download [type:update|full] [outDir=data/epf]')
   process.exit(0)
 }
 
-for (const { group, table, date, url } of await getEPFList(type)) {
+const urls = await getEPFList(type)
+
+// I think these are the useful things
+const goodStuff = ['application_price', 'paid_ipad_application_popularity_per_genre', 'paid_application_popularity_per_genre', 'free_ipad_application_popularity_per_genre', 'free_application_popularity_per_genre', 'storefront', 'key_value', 'genre_application', 'genre', 'device_type', 'artist_application', 'artist', 'application_device_type', 'application_detail', 'application']
+
+for (const { group, table, date, url } of urls) {
+  if (!goodStuff.includes(table)) {
+    continue
+  }
   const epfFile = `${outDir}/${type}/${date.getTime() / 1000}/${group}/${table}.tbz`
   const name = `${group}.${table}`
   let ok

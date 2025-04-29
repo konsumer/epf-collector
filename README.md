@@ -12,16 +12,18 @@ There are 2 stages:
 # STAGE 1
 
 # collect current "update" (incremental)
-./download
+# note: some days this is not available
+./download update
 
 # or
 
 # collect current "full"
-./download full
-
+./download
 
 # STAGE 2
 
 # take current files and insert in duckdb
 ./import
 ```
+
+After you've got all your data in duck, you can see [examples.sql](examples.sql) for useful queries you can run.
