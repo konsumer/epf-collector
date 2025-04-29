@@ -10,7 +10,6 @@ for file in $(find data/epf -name '*.tbz'); do
   pushd data/test
   table=$(basename "${file}" .tbz)
   echo "Creating test-set for ${table}"
-  bunzip2 -c "${dir}/${file}" | node "${dir}/lib/testset.js" > ${table} | bzip2 "${table}"
-  mv "${table}.bz2" "${table}.tbz"
+  bunzip2 -c "${dir}/${file}" | node "${dir}/lib/testset.js" | bzip2 -c > "${table}.tbz"
   popd
 done
