@@ -1,7 +1,9 @@
 #!/bin/bash
 
+set -e
+
 for file in $*; do
   table=$(basename "${file}" .tbz)
   echo "Importing ${table}"
-  bunzip2 "${file}" | node ./lib/import.js | duckdb data/epf.duckdb -c "CREATE TABLE ${table} AS SELECT * FROM read_csv('/dev/stdin', header=true)"
+  bunzip2 "${file}" | node ./lib/epf2csv.js | duckdb data/epf.duckdb -c "CREATE TABLE ${table} AS SELECT * FROM read_csv('/dev/stdin', header=true)"
 done
