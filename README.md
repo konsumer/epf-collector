@@ -9,6 +9,8 @@ export EPF_PASSWORD=your_password
 There are 2 stages:
 
 ```
+# STAGE 1
+
 # collect current "update" (incremental)
 ./download
 
@@ -16,6 +18,9 @@ There are 2 stages:
 
 # collect current "full"
 ./download full
+
+
+# STAGE 2
 
 # take current files and insert in duckdb
 ./import data/epf/full/**/*.tbz
