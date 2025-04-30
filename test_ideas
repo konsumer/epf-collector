@@ -30,7 +30,7 @@ export default function createEPFParserStream(name) {
       // 1st line is header
       if (!headers) {
         headers = line.split('#').pop().split('\x01')
-        console.error(chalk.yellow('headers'), headers.join(', '))
+        console.error(chalk.yellow('headers'), headers)
         callback()
       } else {
         // here you have headers and line
