@@ -91,7 +91,7 @@ for (const file of inputFiles) {
   const reader = createReadStream(file)
   const unbz = createBunzipper()
   const splitter = createSplitStream('\x02\n')
-  const epf2csv = createEPFParserStream(name)
+  const epf2csv = createEPFParserStream()
   const writer = createWriteStream(file.replace('.tbz', '.csv'))
   await pipeline(reader, unbz, splitter, epf2csv, writer)
 }
