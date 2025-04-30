@@ -129,5 +129,5 @@ for (const file of inputFiles) {
 
   await db.run(getCreateSql(name, parser.fields, parser.primaryKeys))
   await db.run(`INSERT OR REPLACE INTO ${name} SELECT * FROM read_csv('${csvFile}', header=true, nullstr='');`)
-  await unlink(csvFile)
+  // await unlink(csvFile)
 }
