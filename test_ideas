@@ -44,7 +44,7 @@ export default function createEPFParserStream(name) {
           if (k === '#legal') {
             k ='legal'
           }
-          console.error(chalk.yellow('comment'), k, v)
+          console.error(chalk.yellow(k), v)
           return callback()
         }
 
