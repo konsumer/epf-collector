@@ -1,0 +1,74 @@
+#!/usr/bin/env node
+
+// Self-contained file to try ideas
+
+import { createReadStream } from 'node:fs'
+import { Transform } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
+import { basename } from 'node:path'
+
+import { glob } from 'glob'
+import createSplitStream from 'split2'
+import createBunzipper from 'unbzip2-stream'
+import chalk from 'chalk'
+
+let [,,...inputFiles] = process.argv
+
+if (!inputFiles?.length) {
+  inputFiles = await glob('data/epf/**/*.tbz')
+}
+
+// make your stream here
+export default function createEPFParserStream(name) {
+  let headers
+  const stream = new Transform({
+    objectMode: true,
+
+    transform(chunk, encoding, callback) {
+      const line = chunk.toString()
+
+      // 1st line is header
+      if (!headers) {
+        headers = line.split('#').pop().split('\x01')
+        console.error(chalk.yellow('headers'), headers.join(', '))
+        callback()
+      } else {
+        // here you have headers and line
+
+        // handle comments
+        if (line.startsWith('#')) {
+          let [k,v] = line.substr(1).split(':')
+          if (['primaryKey', 'dbTypes'].includes(k)) {
+            v = v.split('\x01')
+          }
+          if (k === '#legal') {
+            k ='legal'
+          }
+          console.error(chalk.yellow('comment'), k, v)
+          return callback()
+        }
+
+        // do your stuff here
+
+        const row = line.split('\x01')
+        if (row.length !== headers.length) {
+          console.error(chalk.red('NO', row.join('|')))
+        }
+
+        // error, output-for-next-pipe
+        callback(null, undefined)
+      }
+    }
+  })
+  return stream
+}
+
+for (const file of inputFiles) {
+  const name = basename(file, '.tbz')
+  console.error(chalk.blue(name))
+  const reader = createReadStream(file)
+  const unbz = createBunzipper()
+  const splitter = createSplitStream('\x02\n')
+  const parser = createEPFParserStream(name)
+  await pipeline(reader, unbz, splitter, parser)
+}

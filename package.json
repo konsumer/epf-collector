@@ -9,5 +9,9 @@
     "cheerio": "^1.0.0",
     "progress-stream": "^2.0.0",
     "split2": "^4.2.0"
+  },
+  "devDependencies": {
+    "glob": "^11.0.2",
+    "unbzip2-stream": "^1.4.3"
   }
 }
