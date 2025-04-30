@@ -7,11 +7,13 @@
   "dependencies": {
     "chalk": "^5.4.1",
     "cheerio": "^1.0.0",
+    "csv-stringify": "^6.5.2",
     "progress-stream": "^2.0.0",
     "split2": "^4.2.0"
   },
   "devDependencies": {
     "glob": "^11.0.2",
+    "hexy": "^0.3.5",
     "unbzip2-stream": "^1.4.3"
   }
 }
