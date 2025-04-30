@@ -42,11 +42,12 @@ function parseRow(line, { info: { group, name, date }, fields, headers, exportMo
         // TODO: find other fields
         break
       } else {
+        // fill in fields before problematic fields
         fixed[field] = data[i]
       }
       i++
     }
-    console.error(fixed)
+    console.error(chalk.red('mismatch'), 'got', data.length, 'expected', headers.length, fixed)
     return fixed
   }
 

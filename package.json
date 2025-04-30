@@ -5,6 +5,7 @@
   "type": "module",
   "author": "konsumer",
   "dependencies": {
+    "@duckdb/node-api": "^1.2.2-alpha.18",
     "chalk": "^5.4.1",
     "cheerio": "^1.0.0",
     "csv-stringify": "^6.5.2",
