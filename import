@@ -3,7 +3,7 @@
 // Self-contained file to try ideas
 
 import { createReadStream, createWriteStream } from 'node:fs'
-import { unlink } from 'node:fs/promises'
+import { unlink, writeFile } from 'node:fs/promises'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { basename } from 'node:path'
@@ -14,9 +14,6 @@ import createSplitStream from 'split2'
 import createBunzipper from 'unbzip2-stream'
 import chalk from 'chalk'
 import { stringify } from 'csv-stringify'
-import h from 'hexy'
-
-const { hexy } = h
 
 let [, , ...inputFiles] = process.argv
 
@@ -61,11 +58,13 @@ export default function createEPFParserStream(processFunction = parseRow) {
 
     transform(chunk, encoding, callback) {
       const line = chunk.toString('utf8')
-      stream.lineNum ||= 0
+      stream.lineNum ||= -1
+      stream.problems ||= []
       stream.lineNum++
 
       // 1st line is header
       if (!stream.headers) {
+        stream.problems.push(line)
         const [junk, headersT] = line.split('#')
         stream.headers = headersT.split('\x01')
         // pull lots of info from tar-header
@@ -94,7 +93,11 @@ export default function createEPFParserStream(processFunction = parseRow) {
           }
           return callback()
         }
-        return callback(null, processFunction(line, stream))
+        const row = processFunction(line, stream)
+        if (Object.keys(row).length !== stream.headers.length) {
+          stream.problems.push([stream.lineNum, line])
+        }
+        return callback(null, row)
       }
     }
   })
@@ -120,12 +123,16 @@ for (const file of inputFiles) {
 
   const reader = createReadStream(file)
   const unbzipper = createBunzipper()
-  const splitter = createSplitStream('\x02\n')
+  const splitter = createSplitStream('\u0002\n')
   const parser = createEPFParserStream()
   const csver = stringify({ header: true, quoted_string: true })
   const writer = createWriteStream(csvFile)
 
   await pipeline(reader, unbzipper, splitter, parser, csver, writer)
+
+  if ((parser?.problems?.length  || 0) > 1) {
+    await writeFile(file.replace('.tbz', '.issues'), parser.problems.join('\u0002\n'))
+  }
 
   await db.run(getCreateSql(name, parser.fields, parser.primaryKeys))
   await db.run(`INSERT OR REPLACE INTO ${name} SELECT * FROM read_csv('${csvFile}', header=true, nullstr='');`)
