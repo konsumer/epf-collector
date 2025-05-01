@@ -57,7 +57,11 @@ for (const file of inputFiles) {
   let skipped = 0
   parser.on('skipped', ({ chunk, lineNumber }) => {
     skipped++
-    console.error(chalk.red('\nskipped'), lineNumber, chunk.toString().split('\x01'))
+    const row = chunk
+      .toString()
+      // .replace(/\x01\x01/g, '\x01')
+      .split('\x01')
+    console.error(chalk.red('\nskipped'), lineNumber, row.length, parser.headers.length, row)
   })
 
   // this info is also in the stream object, but it's nice to print as it comes in
@@ -73,6 +77,9 @@ for (const file of inputFiles) {
 
   console.error(chalk.blue('importing'), dbFile)
   await db.run(getCreateSql(parser.info.name, parser.fields, parser.primaryKeys))
-  await db.run(`INSERT OR REPLACE INTO ${parser.info.name} SELECT * FROM read_csv('${csvFile}', header=true, nullstr='');`)
-  // await unlink(csvFile)
+
+  if (await getFileSize(csvFile)) {
+    await db.run(`INSERT OR REPLACE INTO ${parser.info.name} SELECT * FROM read_csv('${csvFile}', header=true, nullstr='');`)
+  }
+  await unlink(csvFile)
 }
