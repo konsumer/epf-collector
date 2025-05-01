@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Collect/check current EPF files
+// CLI util to collect/check current EPF files
 
 import { mkdir, unlink } from 'node:fs/promises'
 import { dirname } from 'node:path'

@@ -1,109 +1,24 @@
 #!/usr/bin/env node
 
-// Self-contained file to try ideas
+// CLI util to turn an EPF file into a CSV file and then import it into a DuckDB database.
 
-import { createReadStream, createWriteStream } from 'node:fs'
-import { unlink, writeFile } from 'node:fs/promises'
-import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+import { createReadStream, createWriteStream } from 'node:fs'
 import { basename } from 'node:path'
+import { unlink } from 'fs/promises'
 
-import { DuckDBInstance } from '@duckdb/node-api'
 import { glob } from 'glob'
-import createSplitStream from 'split2'
 import createBunzipper from 'unbzip2-stream'
+import { stringify as createCsvStream } from 'csv-stringify'
 import chalk from 'chalk'
-import { stringify } from 'csv-stringify'
+import { DuckDBInstance } from '@duckdb/node-api'
 
-let [, , ...inputFiles] = process.argv
+import createByteSplitter from './lib/ByteSplitterStream.js'
+import createEPFParser from './lib/EPFPaserStream.js'
+import createBinaryProgressStream from './lib/BinaryProgressStream.js'
+import { getFileSize } from './lib/fs.js'
 
-if (!inputFiles?.length) {
-  inputFiles = await glob('data/epf/**/*.tbz')
-}
-
-const instance = await DuckDBInstance.create('data/epf.duckdb')
-const db = await instance.connect()
-
-// turn 2 arrays (keys, values) into an object
-const obzip = (keys, values) => keys.reduce((a, k, i) => ({ ...a, [k]: values[i] }), {})
-
-// process 1 EPF line: output an object with all values encoded as javascript strings
-function parseRow(line, { info: { group, name, date }, fields, headers, exportMode, primaryKeys }) {
-  let data = line.split('\u0001')
-
-  if (data.length !== headers.length) {
-    const fixed = {}
-    let i = 0
-    for (const [field, type] of Object.entries(fields)) {
-      if (type === 'TEXT' || type === 'LONGTEXT') {
-        // TODO: find other fields
-        break
-      } else {
-        // fill in fields before problematic fields
-        fixed[field] = data[i]
-      }
-      i++
-    }
-    console.error(chalk.red('mismatch'), 'got', data.length, 'expected', headers.length, fixed)
-    return fixed
-  }
-
-  return obzip(headers, data)
-}
-
-// receives a stream of EPF lines, outputs objects for each row
-export default function createEPFParserStream(processFunction = parseRow) {
-  const stream = new Transform({
-    objectMode: true,
-
-    transform(chunk, encoding, callback) {
-      const line = chunk.toString('utf8')
-      stream.lineNum ||= -1
-      stream.problems ||= []
-      stream.lineNum++
-
-      // 1st line is header
-      if (!stream.headers) {
-        stream.problems.push(line)
-        const [junk, headersT] = line.split('#')
-        stream.headers = headersT.split('\x01')
-        // pull lots of info from tar-header
-        const r = /^([a-z]+)([0-9]{4})([0-9]{2})([0-9]{2})\/([a-z_]+)/
-        const [, group, year, month, day, name] = r.exec(junk)
-        stream.info = { group, name, date: new Date(year, month - 1, day) }
-        console.error(chalk.yellow('info'), stream.info)
-        return callback()
-      } else {
-        // handle comments
-        if (line.startsWith('#')) {
-          let [k, v] = line.substr(1).split(':')
-          if (k === 'primaryKey') {
-            stream.primaryKeys = v.split('\x01')
-            console.error(chalk.yellow('primaryKeys'), stream.primaryKeys)
-          } else if (k === 'dbTypes') {
-            stream.fields = obzip(stream.headers, v.split('\x01'))
-            console.error(chalk.yellow('fields'), stream.fields)
-          } else if (k === 'exportMode') {
-            stream.exportMode = v
-            console.error(chalk.yellow('exportMode'), stream.exportMode)
-          } else if (k !== '#legal') {
-            console.error(chalk.yellow(k), v)
-          } else {
-            stream[k] = v
-          }
-          return callback()
-        }
-        const row = processFunction(line, stream)
-        if (Object.keys(row).length !== stream.headers.length) {
-          stream.problems.push([stream.lineNum, line])
-        }
-        return callback(null, row)
-      }
-    }
-  })
-  return stream
-}
-
+// generate the SQL for table from info
 function getCreateSql(table, types, primaryKeys) {
   const fields = []
   for (const [field, type] of Object.entries(types)) {
@@ -115,26 +30,49 @@ function getCreateSql(table, types, primaryKeys) {
   return `CREATE OR REPLACE TABLE ${table} (${fields.join(', ')});`
 }
 
-for (const file of inputFiles) {
-  const name = basename(file, '.tbz')
-  const csvFile = file.replace('.tbz', '.csv')
+let [, , dbFile = 'data/epf.duckdb', ...inputFiles] = process.argv
 
-  console.error(chalk.blue(name))
+if (!inputFiles?.length) {
+  inputFiles = await glob('data/epf/**/*.tbz')
+}
+
+const instance = await DuckDBInstance.create(dbFile)
+const db = await instance.connect()
+
+for (const file of inputFiles) {
+  console.log(chalk.blue(basename(file, '.tbz')))
+  const csvFile = file.replace('.tbz', '.csv')
+  console.error(chalk.blue('csv'), csvFile)
+
+  const size = await getFileSize(file)
 
   const reader = createReadStream(file)
+  const progger = createBinaryProgressStream(size, process.stderr, { updateMore: true })
   const unbzipper = createBunzipper()
-  const splitter = createSplitStream('\u0002\n')
-  const parser = createEPFParserStream()
-  const csver = stringify({ header: true, quoted_string: true })
+  const splitter = createByteSplitter('\x02\n')
+  const parser = createEPFParser()
+  const csver = createCsvStream({ header: true, quoted_string: true })
   const writer = createWriteStream(csvFile)
 
-  await pipeline(reader, unbzipper, splitter, parser, csver, writer)
+  let skipped = 0
+  parser.on('skipped', ({ chunk, lineNumber }) => {
+    skipped++
+    console.error(chalk.red('\nskipped'), lineNumber, chunk.toString().split('\x01'))
+  })
 
-  if ((parser?.problems?.length || 0) > 1) {
-    await writeFile(file.replace('.tbz', '.issues'), parser.problems.join('\u0002\n'))
-  }
+  // this info is also in the stream object, but it's nice to print as it comes in
+  parser.on('info', ([key, value]) => {
+    console.error(chalk.yellow(key), value)
+  })
 
-  await db.run(getCreateSql(name, parser.fields, parser.primaryKeys))
-  await db.run(`INSERT OR REPLACE INTO ${name} SELECT * FROM read_csv('${csvFile}', header=true, nullstr='');`)
+  await pipeline(reader, progger, unbzipper, splitter, parser, csver, writer)
+  // make space for the progress-bar
+  console.error()
+
+  console.error(chalk.yellow('skipped'), skipped, 'rows')
+
+  console.error(chalk.blue('importing'), dbFile)
+  await db.run(getCreateSql(parser.info.name, parser.fields, parser.primaryKeys))
+  await db.run(`INSERT OR REPLACE INTO ${parser.info.name} SELECT * FROM read_csv('${csvFile}', header=true, nullstr='');`)
   // await unlink(csvFile)
 }

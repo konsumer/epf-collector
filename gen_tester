@@ -1,0 +1,51 @@
+#!/usr/bin/env node
+
+// I want faster test-data to parse (to figure out parsing issues)
+
+import { pipeline } from 'node:stream/promises'
+import { createReadStream, createWriteStream } from 'node:fs'
+import { mkdir } from 'node:fs/promises'
+import { basename } from 'node:path'
+import { Transform } from 'node:stream'
+
+import { glob } from 'glob'
+import createBunzipper from 'unbzip2-stream'
+import chalk from 'chalk'
+
+import createByteSplitter from './lib/ByteSplitterStream.js'
+import createBinaryProgressStream from './lib/BinaryProgressStream.js'
+import { getFileSize } from './lib/fs.js'
+
+function createEPFParser() {
+  return new Transform({
+    transform(chunk, encoding, callback) {
+      callback()
+    }
+  })
+}
+
+let [, , ...inputFiles] = process.argv
+
+if (!inputFiles?.length) {
+  inputFiles = await glob('data/epf/**/*.tbz')
+}
+
+await mkdir('data/test', { recursive: true })
+
+for (const file of inputFiles) {
+  const name = basename(file, '.tbz')
+  console.log(chalk.blue(name))
+  const outFile = `data/test/${name}`
+  const size = await getFileSize(file)
+
+  const reader = createReadStream(file)
+  const progger = createBinaryProgressStream(size, process.stderr, { updateMore: true })
+  const unbzipper = createBunzipper()
+  const splitter = createByteSplitter('\x02\n')
+  const parser = createEPFParser()
+  const writer = createWriteStream(outFile)
+
+  await pipeline(reader, progger, unbzipper, splitter, parser, writer)
+  // make space for the progress-bar
+  console.error()
+}
