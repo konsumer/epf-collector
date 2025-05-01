@@ -4,6 +4,7 @@
 
 import { pipeline } from 'node:stream/promises'
 import { createReadStream, createWriteStream } from 'node:fs'
+import { mkdir } from 'node:fs/promises'
 import { basename } from 'node:path'
 import { unlink } from 'fs/promises'
 
@@ -30,7 +31,12 @@ function getCreateSql(table, types, primaryKeys) {
   return `CREATE OR REPLACE TABLE ${table} (${fields.join(', ')});`
 }
 
-let [, , dbFile = 'data/epf.duckdb', ...inputFiles] = process.argv
+let [, , ...inputFiles] = process.argv
+
+// I may put these in options, later
+const dbFile = 'data/epf.duckdb'
+const outDir = 'data/csv'
+const deleteCsvFile = false
 
 if (!inputFiles?.length) {
   inputFiles = await glob('data/epf/**/*.tbz')
@@ -38,10 +44,12 @@ if (!inputFiles?.length) {
 
 const instance = await DuckDBInstance.create(dbFile)
 const db = await instance.connect()
+await mkdir(outDir, {recursive: true})
 
 for (const file of inputFiles) {
-  console.log(chalk.blue(basename(file, '.tbz')))
-  const csvFile = file.replace('.tbz', '.csv')
+  const name = basename(file, '.tbz')
+  console.log(chalk.blue(name))
+  const csvFile = `${outDir}/${name}.csv`
   console.error(chalk.blue('csv'), csvFile)
 
   const size = await getFileSize(file)
@@ -55,25 +63,28 @@ for (const file of inputFiles) {
   const writer = createWriteStream(csvFile)
 
   let skipped = 0
+  let count = 0
+  const info = {}
+
   parser.on('skipped', ({ chunk, lineNumber }) => {
     skipped++
     const row = chunk.toString().split('\x01')
     console.error(chalk.red('\nskipped'), lineNumber, row.length, parser.headers.length, row)
   })
-
-  let count = 0
   parser.on('parsed', ({ row, chunk, lineNumber }) => {
     count++
   })
-
   parser.on('info', ([key, value]) => {
-    console.error(chalk.yellow(key), value)
+    if (key !== 'legal') {
+      info[key] = value
+    }
   })
 
   await pipeline(reader, progger, unbzipper, splitter, parser, csver, writer)
   // make space for the progress-bar
   console.error()
 
+  console.error(chalk.yellow('info'), info)
   console.error(chalk.green('good'), count, 'rows')
   console.error(chalk.yellow('skipped'), skipped, 'rows')
 
@@ -83,5 +94,8 @@ for (const file of inputFiles) {
   if (await getFileSize(csvFile)) {
     await db.run(`INSERT OR REPLACE INTO ${parser.info.name} SELECT * FROM read_csv('${csvFile}', header=true, nullstr='');`)
   }
-  await unlink(csvFile)
+  if (deleteCsvFile) {
+    console.error(chalk.blue('deleting'), csvFile)
+    await unlink(csvFile)
+  }
 }
