@@ -18,7 +18,6 @@ if (!inputFiles?.length) {
 // turn 2 arrays (keys, values) into an object
 const obzip = (keys, values) => keys.reduce((a, k, i) => ({ ...a, [k]: values[i] }), {})
 
-
 // receives a stream of EPF lines, outputs objects for each row
 export default function createEPFParserStream() {
   let outputinfo = false
@@ -59,12 +58,15 @@ export default function createEPFParserStream() {
         }
         if (!outputinfo) {
           outputinfo = true
-          console.log(`export const ${stream.info.name} = ` + JSON.stringify({
-            ...stream.info,
-            primaryKeys: stream.primaryKeys,
-            fields: stream.fields,
-            exportMode: stream.exportMode
-          }))
+          console.log(
+            `export const ${stream.info.name} = ` +
+              JSON.stringify({
+                ...stream.info,
+                primaryKeys: stream.primaryKeys,
+                fields: stream.fields,
+                exportMode: stream.exportMode
+              }, null, 2)
+          )
           callback()
         } else {
           callback('stop')
@@ -75,8 +77,6 @@ export default function createEPFParserStream() {
   return stream
 }
 
-
-
 for (const file of inputFiles) {
   const name = basename(file, '.tbz')
 
@@ -86,7 +86,7 @@ for (const file of inputFiles) {
   const parser = createEPFParserStream()
 
   // fast exit and move on
-  try{
+  try {
     await pipeline(reader, unbzipper, splitter, parser)
-  }catch (e) { }
+  } catch (e) {}
 }

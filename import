@@ -130,7 +130,7 @@ for (const file of inputFiles) {
 
   await pipeline(reader, unbzipper, splitter, parser, csver, writer)
 
-  if ((parser?.problems?.length  || 0) > 1) {
+  if ((parser?.problems?.length || 0) > 1) {
     await writeFile(file.replace('.tbz', '.issues'), parser.problems.join('\u0002\n'))
   }
 
