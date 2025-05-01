@@ -57,14 +57,15 @@ for (const file of inputFiles) {
   let skipped = 0
   parser.on('skipped', ({ chunk, lineNumber }) => {
     skipped++
-    const row = chunk
-      .toString()
-      // .replace(/\x01\x01/g, '\x01')
-      .split('\x01')
+    const row = chunk.toString().split('\x01')
     console.error(chalk.red('\nskipped'), lineNumber, row.length, parser.headers.length, row)
   })
 
-  // this info is also in the stream object, but it's nice to print as it comes in
+  let count = 0
+  parser.on('parsed', ({ row, chunk, lineNumber }) => {
+    count++
+  })
+
   parser.on('info', ([key, value]) => {
     console.error(chalk.yellow(key), value)
   })
@@ -73,6 +74,7 @@ for (const file of inputFiles) {
   // make space for the progress-bar
   console.error()
 
+  console.error(chalk.green('good'), count, 'rows')
   console.error(chalk.yellow('skipped'), skipped, 'rows')
 
   console.error(chalk.blue('importing'), dbFile)
