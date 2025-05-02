@@ -130,30 +130,44 @@ CREATE TABLE search_keywords (
   word VARCHAR,
   application_id BIGINT,
   score DOUBLE,
-  PRIMARY KEY (word, application_id)
+  storefront_id INTEGER,
+  PRIMARY KEY (word, application_id, storefront_id)
 );
 
-INSERT INTO search_keywords (word, application_id, score)
+-- Insert the results into the search_keywords table
+INSERT INTO search_keywords (word, application_id, score, storefront_id)
 WITH
--- Extract and score words from titles
+-- Get distinct popular applications by storefront
+popular_apps AS (
+  SELECT DISTINCT
+    application_id,
+    storefront_id
+  FROM free_application_popularity_per_genre WHERE genre_id=36
+),
+
+-- Extract and score words from titles, only for popular apps
 title_words AS (
   SELECT
-    application_id,
+    a.application_id,
+    p.storefront_id,
     lower(trim(word)) AS word,
     1.2 AS score
-  FROM application,
-       unnest(string_split(regexp_replace(title, '[^\w\s]', ' '), ' ')) AS t(word)
+  FROM application a
+  JOIN popular_apps p ON a.application_id = p.application_id,
+  unnest(string_split(regexp_replace(a.title, '[^\w\s]', ' '), ' ')) AS t(word)
   WHERE length(trim(word)) > 0
 ),
 
--- Extract and score words from descriptions
+-- Extract and score words from descriptions, only for popular apps
 desc_words AS (
   SELECT
-    application_id,
+    a.application_id,
+    p.storefront_id,
     lower(trim(word)) AS word,
     1.0 AS base_score
-  FROM application,
-       unnest(string_split(regexp_replace(description, '[^\w\s]', ' '), ' ')) AS d(word)
+  FROM application a
+  JOIN popular_apps p ON a.application_id = p.application_id,
+  unnest(string_split(regexp_replace(a.description, '[^\w\s]', ' '), ' ')) AS d(word)
   WHERE length(trim(word)) > 0
 ),
 
@@ -161,6 +175,7 @@ desc_words AS (
 desc_word_counts AS (
   SELECT
     application_id,
+    storefront_id,
     word,
     count(*) AS occurrences,
     CASE
@@ -168,20 +183,21 @@ desc_word_counts AS (
       ELSE 1.0 + (count(*) - 1) * 0.5
     END AS score
   FROM desc_words
-  GROUP BY application_id, word
+  GROUP BY application_id, storefront_id, word
 ),
 
 -- Combine both sources
 all_words AS (
-  SELECT application_id, word, score FROM title_words
+  SELECT application_id, storefront_id, word, score FROM title_words
   UNION ALL
-  SELECT application_id, word, score FROM desc_word_counts
+  SELECT application_id, storefront_id, word, score FROM desc_word_counts
 )
 
 -- Final aggregation
 SELECT
   word,
   application_id,
-  sum(score) AS score
+  sum(score) AS score,
+  storefront_id
 FROM all_words
-GROUP BY word, application_id;
+GROUP BY word, application_id, storefront_id;
