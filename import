@@ -38,6 +38,7 @@ let [, , ...inputFiles] = process.argv
 const dbFile = 'data/epf.duckdb'
 const outDir = 'data/csv'
 const deleteCsvFile = false
+const errorChunksDir='data/chunks'
 
 if (!inputFiles?.length) {
   inputFiles = await glob('data/epf/**/*.tbz')
@@ -46,6 +47,10 @@ if (!inputFiles?.length) {
 const instance = await DuckDBInstance.create(dbFile)
 const db = await instance.connect()
 await mkdir(outDir, {recursive: true})
+
+if (errorChunksDir) {
+  await mkdir(errorChunksDir, {recursive: true})
+}
 
 for (const file of inputFiles) {
   const name = basename(file, '.tbz')
@@ -71,7 +76,9 @@ for (const file of inputFiles) {
     skipped++
     const row = chunk.toString().split('\x01')
     console.error(chalk.red('\nskipped'), lineNumber, row.length, parser.headers.length)
-    // writeFileSync(`data/chunks/${name}-${lineNumber}.bin`, chunk)
+    if (errorChunksDir) {
+      writeFileSync(`${errorChunksDir}/${name}-${lineNumber}.bin`, chunk)
+    }
   })
   parser.on('parsed', ({ row, chunk, lineNumber }) => {
     count++
