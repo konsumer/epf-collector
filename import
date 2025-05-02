@@ -23,16 +23,11 @@ import { getFileSize } from './lib/fs.js'
 // generate the SQL for table from info
 function getCreateSql(table, types, primaryKeys) {
   const fields = []
-  const primaries = []
   for (const [field, type] of Object.entries(types)) {
     fields.push(`${field} ${type.replace('LONGTEXT', 'TEXT')}`)
-    // genre has mismatch with primaryKeys!
-    if (primaryKeys.includes(field)) {
-      primaries.push(field)
-    }
   }
-  if (primaries?.length) {
-    fields.push(`PRIMARY KEY(${primaries.join(', ')})`)
+  if (primaryKeys?.length) {
+    fields.push(`PRIMARY KEY(${primaryKeys.join(', ')})`)
   }
   return `CREATE OR REPLACE TABLE ${table} (${fields.join(', ')});`
 }
@@ -96,10 +91,15 @@ for (const file of inputFiles) {
   console.error(chalk.yellow('skipped'), skipped, 'rows')
 
   console.error(chalk.blue('importing'), dbFile)
-  await db.run(getCreateSql(parser.info.name, parser.fields, parser.primaryKeys))
+  const primaries = parser.primaryKeys.filter(k => parser.headers.includes(k))
+  await db.run(getCreateSql(parser.info.name, parser.fields, primaries))
 
   if (await getFileSize(csvFile)) {
-    await db.run(`INSERT OR REPLACE INTO ${parser.info.name} SELECT * FROM read_csv('${csvFile}', header=true, nullstr='');`)
+    if (primaries.length) {
+      await db.run(`INSERT OR REPLACE INTO ${parser.info.name} SELECT * FROM read_csv('${csvFile}', header=true, nullstr='');`)
+    } else {
+      await db.run(`INSERT INTO ${parser.info.name} SELECT * FROM read_csv('${csvFile}', header=true, nullstr='');`)
+    }
   }
   if (deleteCsvFile) {
     console.error(chalk.blue('deleting'), csvFile)
