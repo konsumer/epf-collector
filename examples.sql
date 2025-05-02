@@ -19,6 +19,34 @@ SELECT
 FROM application
 WHERE application.application_id=479516143;
 
+-- Get a joined-array app
+SELECT
+  app.application_id AS id,
+  app.title,
+  app.recommended_age,
+  app.artist_name,
+  app.seller_name,
+  app.company_url,
+  app.support_url,
+  app.view_url,
+  app.artwork_url_large,
+  app.artwork_url_small,
+  app.itunes_release_date,
+  app.copyright,
+  app.description,
+  app.version,
+  app.itunes_version,
+  app.download_size,
+  (SELECT ARRAY_AGG(language_code)
+    FROM application_detail
+    WHERE application_id = app.application_id) AS languages,
+  (SELECT ARRAY_AGG(name)
+    FROM genre
+    JOIN genre_application ON genre.genre_id = genre_application.genre_id
+    WHERE genre_application.application_id = app.application_id) AS genres
+FROM application AS app
+WHERE app.application_id = 479516143;
+
 
 -- Get list of title, description & supported languages for an app
 SELECT title, description, language_code from application_detail WHERE application_id=479516143;
