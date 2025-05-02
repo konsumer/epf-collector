@@ -118,3 +118,70 @@ FROM
   application_price
 WHERE
   application_price.application_id=479516143;
+
+
+-- ADVANCED: create a seperate table with keywords scores
+
+-- get all search-term words from title & description
+-- title terms get a score of 1.2, description terms get 1.
+-- if the word occurs more than once, it gets a score of half of that per instance, after the initial
+
+CREATE TABLE search_keywords (
+  word VARCHAR,
+  application_id BIGINT,
+  score DOUBLE,
+  PRIMARY KEY (word, application_id)
+);
+
+INSERT INTO search_keywords (word, application_id, score)
+WITH
+-- Extract and score words from titles
+title_words AS (
+  SELECT
+    application_id,
+    lower(trim(word)) AS word,
+    1.2 AS score
+  FROM application,
+       unnest(string_split(regexp_replace(title, '[^\w\s]', ' '), ' ')) AS t(word)
+  WHERE length(trim(word)) > 0
+),
+
+-- Extract and score words from descriptions
+desc_words AS (
+  SELECT
+    application_id,
+    lower(trim(word)) AS word,
+    1.0 AS base_score
+  FROM application,
+       unnest(string_split(regexp_replace(description, '[^\w\s]', ' '), ' ')) AS d(word)
+  WHERE length(trim(word)) > 0
+),
+
+-- Count occurrences in descriptions for scoring
+desc_word_counts AS (
+  SELECT
+    application_id,
+    word,
+    count(*) AS occurrences,
+    CASE
+      WHEN count(*) = 1 THEN 1.0
+      ELSE 1.0 + (count(*) - 1) * 0.5
+    END AS score
+  FROM desc_words
+  GROUP BY application_id, word
+),
+
+-- Combine both sources
+all_words AS (
+  SELECT application_id, word, score FROM title_words
+  UNION ALL
+  SELECT application_id, word, score FROM desc_word_counts
+)
+
+-- Final aggregation
+SELECT
+  word,
+  application_id,
+  sum(score) AS score
+FROM all_words
+GROUP BY word, application_id;

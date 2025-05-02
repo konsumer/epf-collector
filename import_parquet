@@ -2,60 +2,72 @@
 
 // CLI util to turn an EPF file into a CSV file and then import it into a DuckDB database.
 
+import { Transform, PassThrough } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { createReadStream, createWriteStream, writeFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { basename } from 'node:path'
-import { unlink } from 'fs/promises'
 
+import p from 'parquetjs'
 import { glob } from 'glob'
 import createBunzipper from 'unbzip2-stream'
-import { stringify as createCsvStream } from 'csv-stringify'
 import chalk from 'chalk'
-import { DuckDBInstance } from '@duckdb/node-api'
 
 import createByteSplitter from './lib/ByteSplitterStream.js'
 import createEPFParser from './lib/EPFPaserStream.js'
 import createBinaryProgressStream from './lib/BinaryProgressStream.js'
 import { getFileSize } from './lib/fs.js'
+import * as tables from './lib/tables_parquet.js'
 
-// generate the SQL for table from info
-function getCreateSql(table, types, primaryKeys) {
-  const fields = []
-  for (const [field, type] of Object.entries(types)) {
-    fields.push(`${field} ${type.replace('LONGTEXT', 'TEXT')}`)
-  }
-  if (primaryKeys?.length) {
-    fields.push(`PRIMARY KEY(${primaryKeys.join(', ')})`)
-  }
-  return `CREATE OR REPLACE TABLE ${table} (${fields.join(', ')});`
-}
+// it's a stupid commonjs module
+const { ParquetSchema, ParquetTransformer } = p
 
 let [, , ...inputFiles] = process.argv
 
 // I may put these in options, later
-const dbFile = 'data/epf.duckdb'
-const outDir = 'data/csv'
-const deleteCsvFile = false
-const errorChunksDir='data/chunks'
+const outDir = 'data/parquet'
+const errorChunksDir=false
 
 if (!inputFiles?.length) {
   inputFiles = await glob('data/epf/**/*.tbz')
 }
 
-const instance = await DuckDBInstance.create(dbFile)
-const db = await instance.connect()
 await mkdir(outDir, {recursive: true})
 
 if (errorChunksDir) {
   await mkdir(errorChunksDir, {recursive: true})
 }
 
+// just puts objects into correct shape for parquet-encoder
+function createParquetStream(name) {
+  const processStream = new Transform({
+    objectMode: true,
+    transform(chunk, encoding, callback) {
+      const value = {}
+      for (const [field, { type }] of Object.entries(tables[name])) {
+        value[field] = chunk[field] === '' ? null : value[field] = chunk[field]
+      }
+      callback(null, { value })
+    }
+  })
+  return processStream
+}
+
+
+export const application_price = {
+  export_date: { type: "INT64", optional: true },
+  application_id: { type: "INT64", optional: false },  // Primary key
+  retail_price: { type: "DOUBLE", optional: true },
+  currency_code: { type: "UTF8", optional: true },
+  storefront_id: { type: "INT32", optional: false }    // Primary key
+};
+
+
 for (const file of inputFiles) {
   const name = basename(file, '.tbz')
   console.log(chalk.blue(name))
-  const csvFile = `${outDir}/${name}.csv`
-  console.error(chalk.blue('csv'), csvFile)
+  const parquetFile = `${outDir}/${name}.parquet`
+  console.error(chalk.blue('parquet'), parquetFile)
 
   const size = await getFileSize(file)
 
@@ -64,8 +76,11 @@ for (const file of inputFiles) {
   const unbzipper = createBunzipper()
   const splitter = createByteSplitter('\x02\n')
   const parser = createEPFParser()
-  const csver = createCsvStream({ header: true, quoted_string: true })
-  const writer = createWriteStream(csvFile)
+  const parqueter = createParquetStream(name)
+
+  const outStream = new ParquetTransformer(new ParquetSchema({ value: { fields: tables[name] } }))
+
+  const writer = createWriteStream(parquetFile)
 
   let skipped = 0
   let count = 0
@@ -88,27 +103,11 @@ for (const file of inputFiles) {
     }
   })
 
-  await pipeline(reader, progger, unbzipper, splitter, parser, csver, writer)
+  await pipeline(reader, progger, unbzipper, splitter, parser, parqueter, outStream, writer)
   // make space for the progress-bar
   console.error()
 
   console.error(chalk.yellow('info'), info)
   console.error(chalk.green('good'), count, 'rows')
   console.error(chalk.yellow('skipped'), skipped, 'rows')
-
-  console.error(chalk.blue('importing'), dbFile)
-  const primaries = parser.primaryKeys.filter(k => parser.headers.includes(k))
-  await db.run(getCreateSql(parser.info.name, parser.fields, primaries))
-
-  if (await getFileSize(csvFile)) {
-    if (primaries.length) {
-      await db.run(`INSERT OR REPLACE INTO ${parser.info.name} SELECT * FROM read_csv('${csvFile}', header=true, nullstr='');`)
-    } else {
-      await db.run(`INSERT INTO ${parser.info.name} SELECT * FROM read_csv('${csvFile}', header=true, nullstr='');`)
-    }
-  }
-  if (deleteCsvFile) {
-    console.error(chalk.blue('deleting'), csvFile)
-    await unlink(csvFile)
-  }
 }
