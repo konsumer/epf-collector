@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-// CLI util to turn an EPF file into a CSV file and then import it into a DuckDB database.
+// CLI util to turn an EPF file into a parquet file
+// THis is pretty slow compared to the CSV importer, so you should probly use that
 
 import { Transform, PassThrough } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
