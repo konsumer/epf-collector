@@ -3,7 +3,7 @@
 // CLI util to turn an EPF file into a CSV file and then import it into a DuckDB database.
 
 import { pipeline } from 'node:stream/promises'
-import { createReadStream, createWriteStream } from 'node:fs'
+import { createReadStream, createWriteStream, writeFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { basename } from 'node:path'
 import { unlink } from 'fs/promises'
@@ -13,6 +13,7 @@ import createBunzipper from 'unbzip2-stream'
 import { stringify as createCsvStream } from 'csv-stringify'
 import chalk from 'chalk'
 import { DuckDBInstance } from '@duckdb/node-api'
+import hexy from 'hexy'
 
 import createByteSplitter from './lib/ByteSplitterStream.js'
 import createEPFParser from './lib/EPFPaserStream.js'
@@ -22,11 +23,16 @@ import { getFileSize } from './lib/fs.js'
 // generate the SQL for table from info
 function getCreateSql(table, types, primaryKeys) {
   const fields = []
+  const primaries = []
   for (const [field, type] of Object.entries(types)) {
     fields.push(`${field} ${type.replace('LONGTEXT', 'TEXT')}`)
+    // genre has mismatch with primaryKeys!
+    if (primaryKeys.includes(field)) {
+      primaries.push(field)
+    }
   }
-  if (primaryKeys?.length) {
-    fields.push(`PRIMARY KEY(${primaryKeys.join(', ')})`)
+  if (primaries?.length) {
+    fields.push(`PRIMARY KEY(${primaries.join(', ')})`)
   }
   return `CREATE OR REPLACE TABLE ${table} (${fields.join(', ')});`
 }
@@ -69,7 +75,8 @@ for (const file of inputFiles) {
   parser.on('skipped', ({ chunk, lineNumber }) => {
     skipped++
     const row = chunk.toString().split('\x01')
-    console.error(chalk.red('\nskipped'), lineNumber, row.length, parser.headers.length, row)
+    console.error(chalk.red('\nskipped'), lineNumber, row.length, parser.headers.length)
+    // writeFileSync(`data/chunks/${name}-${lineNumber}.bin`, chunk)
   })
   parser.on('parsed', ({ row, chunk, lineNumber }) => {
     count++
