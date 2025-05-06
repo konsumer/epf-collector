@@ -1,3 +1,5 @@
+-- this is import script for duckdb to just import all the CSV files
+
 CREATE TABLE application_price AS SELECT * FROM read_csv('data/csv/application_price.csv',columns={'export_date': 'BIGINT', 'application_id': 'BIGINT', 'retail_price': 'DECIMAL(9,3)', 'currency_code': 'VARCHAR(20)', 'storefront_id': 'INTEGER'});
 
 CREATE TABLE storefront AS SELECT * FROM read_csv('data/csv/storefront.csv',columns={'export_date': 'BIGINT', 'storefront_id': 'INTEGER', 'country_code': 'VARCHAR(10)', 'name': 'VARCHAR(200)'});
