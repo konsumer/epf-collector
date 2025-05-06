@@ -25,6 +25,10 @@ There are 2 stages:
 # take current files and insert in duckdb
 # this requires pbzip2 in your path (as well as duckdb)
 ./epf2csv | duckdb data/epf.duckdb
+
+
+# full download & import & cleanup
+./download && ./epf2csv | duckdb data/epf.duckdb && rm -rf data/csv
 ```
 
 After you've got all your data in duck, you can see [examples.sql](examples.sql) for useful queries you can run.
