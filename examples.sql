@@ -82,15 +82,13 @@ FROM free_ipad_application_popularity_per_genre
 WHERE application_id=479516143;
 
 
--- Get top free mobile apps in US
+-- Get top 200 free mobile apps in US
 SELECT
-	export_date,
-	storefront_id,
-	genre_id,
-	application_id,
-	application_rank
-FROM free_application_popularity_per_genre
-WHERE genre_id=36 AND storefront_id=143441 ORDER BY application_rank;
+    a.title,
+  pop.application_id,
+  pop.application_rank
+FROM free_application_popularity_per_genre pop, application a
+WHERE genre_id=36 AND storefront_id=143441 AND a.application_id=pop.application_id ORDER BY application_rank;
 
 
 -- Get list of "mobile" genres
