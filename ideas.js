@@ -13,6 +13,7 @@ import { promisify } from 'node:util'
 import { pipeline } from 'node:stream/promises'
 import { createWriteStream } from 'node:fs'
 
+import { format as createCsvStream } from '@fast-csv/format'
 import createSplitter from 'split2'
 
 // fast bzip2 stream (requires pbzip2 in path)
@@ -89,24 +90,35 @@ function getSqlColumns(info) {
 
 // very simple format: delimiter is \1, newlines are escaped
 async function epf2csv(epfFile, outFile) {
+  const info = await getInfo(epfFile)
+  const headers = Object.keys(info.types)
+
   const bz = createBzStream(epfFile)
   const split = createSplitter('\x02\n')
+  const csv = createCsvStream()
   let linenum = 0
   const converter = new Transform({
+    objectMode: true,
     transform(chunk, encoding, callback) {
       linenum++
       const line = chunk.toString('utf8')
       if (line.startsWith('#') || linenum === 1) {
         return callback()
       }
-      const csvLine = line.replace(/\r/g, '').replace(/\|/g, '\\|').replace(/\x01/g, '|').replace(/\n/g, '\\n').trim() + '\r\n'
-      callback(null, csvLine)
+     
+      const row = line.split('\x01')
+      if (row.length !== headers.length) {
+        // skip bad lines
+        return callback()
+      }
+
+      callback(null, row)
     }
   })
   const writer = createWriteStream(outFile)
-  await pipeline(bz, split, converter, writer)
-  const info = await getInfo(epfFile)
-  console.log(`CREATE TABLE ${info.name} AS SELECT * FROM read_csv('${outFile}', store_rejects=true,new_line='\\r\\n',ignore_errors=true,header=false,delim='|',columns={${getSqlColumns(info)}});`)
+  await pipeline(bz, split, converter, csv, writer)
+  
+  console.log(`CREATE TABLE ${info.name} AS SELECT * FROM read_csv('${outFile}',columns={${getSqlColumns(info)}});`)
 }
 
 await epf2csv('data/epf/full/1745737200/itunes/application.tbz', 'data/test.csv')
