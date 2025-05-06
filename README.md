@@ -23,7 +23,11 @@ There are 2 stages:
 # STAGE 2
 
 # take current files and insert in duckdb
-./import
+# this requires pbzip2 in your path (as well as duckdb)
+./epf2csv | duckdb data/epf.duckdb
 ```
 
 After you've got all your data in duck, you can see [examples.sql](examples.sql) for useful queries you can run.
+
+
+`epf2csv` will just create CSV files, which you can use however you want, like import to duckdb with `duckdb data/epf.duckdb < import.sql`

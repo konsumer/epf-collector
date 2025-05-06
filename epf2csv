@@ -1,24 +1,28 @@
-/*
+#!/usr/bin/env node
 
-This has a few ideas:
-
-- stream directly into duck
-- use pbz2 in sub-process stream
-- EpfStream parses header, and then outputs CSV
-*/
+// util to convert EPF files to more friendly CSV
 
 import { spawn } from 'node:child_process'
 import { Transform, Readable, Writable } from 'node:stream'
 import { promisify } from 'node:util'
 import { pipeline } from 'node:stream/promises'
 import { createWriteStream } from 'node:fs'
+import { mkdir } from 'node:fs/promises'
+import { basename } from 'node:path'
 
 import { format as createCsvStream } from '@fast-csv/format'
 import createSplitter from 'split2'
+import { glob } from 'glob'
+import chalk from 'chalk'
 
 // fast bzip2 stream (requires pbzip2 in path)
-function createBzStream(file) {
-  const s = spawn('pbzip2', ['-cd', file])
+// inMem will do the operation in memory (a bit faster, at cost of memory)
+function createBzStream(file, inMem=true) {
+  const options = ['-cd']
+  if (inMem) {
+    options.push('-r')
+  }
+  const s = spawn('pbzip2', [...options, file])
   return s.stdout
 }
 
@@ -88,15 +92,30 @@ function getSqlColumns(info) {
   return fields.join(', ')
 }
 
+function formatMillisecondsToTime(milliseconds) {
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  const formattedHours = String(hours).padStart(2, '0');
+  const formattedMinutes = String(minutes).padStart(2, '0');
+  const formattedSeconds = String(seconds).padStart(2, '0');
+
+  return `${formattedHours}:${formattedMinutes}:${formattedSeconds}`;
+}
+
 // very simple format: delimiter is \1, newlines are escaped
-async function epf2csv(epfFile, outFile) {
-  const info = await getInfo(epfFile)
+async function epf2csv(info, epfFile, outFile) {
   const headers = Object.keys(info.types)
 
   const bz = createBzStream(epfFile)
   const split = createSplitter('\x02\n')
   const csv = createCsvStream()
-  let linenum = 0
+
+  let linenum=0
+  const skipped =[]
+
   const converter = new Transform({
     objectMode: true,
     transform(chunk, encoding, callback) {
@@ -109,6 +128,7 @@ async function epf2csv(epfFile, outFile) {
       const row = line.split('\x01')
       if (row.length !== headers.length) {
         // skip bad lines
+        skipped.push(linenum)
         return callback()
       }
 
@@ -117,8 +137,31 @@ async function epf2csv(epfFile, outFile) {
   })
   const writer = createWriteStream(outFile)
   await pipeline(bz, split, converter, csv, writer)
-  
+
+  return {skipped, linenum}
+}
+
+let [, , ...inputFiles] = process.argv
+
+if (!inputFiles?.length) {
+  inputFiles = await glob('data/epf/**/*.tbz')
+}
+
+const outDir='data/csv'
+await mkdir(outDir, { recursive: true })
+
+const start = performance.now()
+
+for (const f of inputFiles) {
+  const info = await getInfo(f)
+  console.error(chalk.yellow(info.name), info)
+  const outFile = `${outDir}/${info.name}.csv`
+  const stats = await epf2csv(info, f, outFile)
+  console.error('Skipped', stats.skipped.length, 'rows')
+  console.error(`took`, formatMillisecondsToTime(performance.now() - start), 'to complete', info.name)
+  // output duckdb command to import this
   console.log(`CREATE TABLE ${info.name} AS SELECT * FROM read_csv('${outFile}',columns={${getSqlColumns(info)}});`)
 }
 
-await epf2csv('data/epf/full/1745737200/itunes/application.tbz', 'data/test.csv')
+const end = performance.now()
+console.error(`took`, formatMillisecondsToTime(end - start), 'to complete', inputFiles.length, 'tables')
