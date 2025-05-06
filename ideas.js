@@ -12,7 +12,7 @@ import { Transform, Readable, Writable } from 'node:stream'
 import { promisify } from 'node:util'
 import { pipeline } from 'node:stream/promises'
 import { createWriteStream } from 'node:fs'
-import duckdb from 'duckdb'
+
 import createSplitter from 'split2'
 
 // fast bzip2 stream (requires pbzip2 in path)
@@ -22,6 +22,7 @@ function createBzStream(file) {
 }
 
 // get info from EPF header
+// not using here, but eventuially this will setup sql
 async function getInfo(file) {
   const bz = createBzStream(file)
   let info = {}
@@ -64,7 +65,9 @@ async function getInfo(file) {
 }
 
 // output SQL to create table
-function getCreateSql(table, types, primaryKeys) {
+// not using here, but eventuially this will setup sql
+function getCreateSql(info) {
+  const { name, types, primaryKeys } = info
   const fields = []
   for (const [field, type] of Object.entries(types)) {
     fields.push(`${field} ${type.replace('LONGTEXT', 'TEXT')}`)
@@ -72,25 +75,23 @@ function getCreateSql(table, types, primaryKeys) {
   if (primaryKeys?.length) {
     fields.push(`PRIMARY KEY(${primaryKeys.join(', ')})`)
   }
-  return `CREATE OR REPLACE TABLE ${table} (${fields.join(', ')});`
+  return `CREATE OR REPLACE TABLE ${name} (${fields.join(', ')});`
 }
 
-async function createDuckStream(conn, info, options = "AUTO_DETECT TRUE, HEADER FALSE, DELIMITER '\x01'") {
-  const dbExec = promisify(conn.exec.bind(conn))
-  const dbPrepare = promisify(conn.prepare.bind(conn))
-  await dbExec(getCreateSql(info.name, info.types, info.primaryKeys))
-  const duckdbProcess = await dbPrepare(`COPY ${info.name} FROM stdin (${options})`)
-
-  return duckdbProcess.stdin()
+// outputs format for duck's read_csv
+function getSqlColumns(info) {
+  const fields = []
+  for (const [field, type] of Object.entries(info.types)) {
+    fields.push(`'${field}': '${type.replace('LONGTEXT', 'TEXT')}'`)
+  }
+  return fields.join(', ')
 }
 
 // very simple format: delimiter is \1, newlines are escaped
-// SELECT * FROM read_csv('data/test.csv', ignore_errors=true,header=false);
 async function epf2csv(epfFile, outFile) {
-  const bz = createBzStream(epfFile) // Your bzip2 stream creator
-  const split = createSplitter('\x02\n') // Your custom splitter
+  const bz = createBzStream(epfFile)
+  const split = createSplitter('\x02\n')
   let linenum = 0
-
   const converter = new Transform({
     transform(chunk, encoding, callback) {
       linenum++
@@ -98,13 +99,14 @@ async function epf2csv(epfFile, outFile) {
       if (line.startsWith('#') || linenum === 1) {
         return callback()
       }
-      const csvLine = line.replace(/,/g, '\\,').replace(/\x01/g, ',').replace(/\n/g, '\\n') + '\n' // Add back the newline for row separation
+      const csvLine = line.replace(/\r/g, '').replace(/\|/g, '\\|').replace(/\x01/g, '|').replace(/\n/g, '\\n').trim() + '\r\n'
       callback(null, csvLine)
     }
   })
-
   const writer = createWriteStream(outFile)
   await pipeline(bz, split, converter, writer)
+  const info = await getInfo(epfFile)
+  console.log(`CREATE TABLE ${info.name} AS SELECT * FROM read_csv('${outFile}', store_rejects=true,new_line='\\r\\n',ignore_errors=true,header=false,delim='|',columns={${getSqlColumns(info)}});`)
 }
 
 await epf2csv('data/epf/full/1745737200/itunes/application.tbz', 'data/test.csv')
