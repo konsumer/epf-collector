@@ -1,0 +1,15 @@
+COPY application TO 'data/parquet/application' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date));
+COPY application_detail TO 'data/parquet/application_detail' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date, language_code));
+COPY application_device_type TO 'data/parquet/application_device_type' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date));
+COPY application_price TO 'data/parquet/application_price' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date, storefront_id));
+COPY artist TO 'data/parquet/artist' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date));
+COPY artist_application TO 'data/parquet/artist_application' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date));
+COPY device_type TO 'data/parquet/device_type' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date));
+COPY free_ipad_application_popularity_per_genre TO 'data/parquet/paid_ipad_application_popularity_per_genre' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date, storefront_id));
+COPY free_application_popularity_per_genre TO 'data/parquet/paid_ipad_application_popularity_per_genre' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date, storefront_id));
+COPY genre TO 'data/parquet/genre' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date, parent_id));
+COPY genre_application TO 'data/parquet/genre_application' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date, genre_id));
+COPY key_value TO 'data/parquet/key_value' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date));
+COPY paid_application_popularity_per_genre TO 'data/parquet/paid_ipad_application_popularity_per_genre' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date, storefront_id));
+COPY paid_ipad_application_popularity_per_genre TO 'data/parquet/paid_ipad_application_popularity_per_genre' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date, storefront_id));
+COPY storefront TO 'data/parquet/storefront' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date));

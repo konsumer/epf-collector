@@ -151,6 +151,7 @@ const outDir='data/csv'
 await mkdir(outDir, { recursive: true })
 
 const start = performance.now()
+let last = start
 
 for (const f of inputFiles) {
   const info = await getInfo(f)
@@ -158,7 +159,9 @@ for (const f of inputFiles) {
   const outFile = `${outDir}/${info.name}.csv`
   const stats = await epf2csv(info, f, outFile)
   console.error('Skipped', stats.skipped.length, 'rows')
-  console.error(`took`, formatMillisecondsToTime(performance.now() - start), 'to complete', info.name)
+  
+  console.error(`took`, formatMillisecondsToTime(performance.now() - last), 'to complete', info.name)
+  last = performance.now()
   
   // output duckdb command to import this, I log so you can pipe it directly to duck
   console.log(`CREATE TABLE ${info.name} AS SELECT * FROM read_csv('${outFile}',columns={${getSqlColumns(info)}});`)

@@ -34,4 +34,15 @@ There are 2 stages:
 After you've got all your data in duck, you can see [examples.sql](examples.sql) for useful queries you can run.
 
 
-`epf2csv` will just create CSV files, which you can use however you want, like import to duckdb with `duckdb data/epf.duckdb < import.sql`
+`epf2csv` will just create CSV files, which you can use however you want. `epf2csv` doesn;t automatically import to duck, but it does output all the SQL on stdout, so youc an pipe it.
+
+Here are some other things you can do:
+
+```
+# import all CSV, if you didn't pipe it from epf2csv
+duckdb data/epf.duckdb < import.sql
+
+# export all tables to niocely partitioned parquet
+mkdir -p data/parquet
+duckdb data/epf.duckdb < export_parquet.sql
+```
