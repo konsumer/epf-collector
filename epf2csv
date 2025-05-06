@@ -159,7 +159,8 @@ for (const f of inputFiles) {
   const stats = await epf2csv(info, f, outFile)
   console.error('Skipped', stats.skipped.length, 'rows')
   console.error(`took`, formatMillisecondsToTime(performance.now() - start), 'to complete', info.name)
-  // output duckdb command to import this
+  
+  // output duckdb command to import this, I log so you can pipe it directly to duck
   console.log(`CREATE TABLE ${info.name} AS SELECT * FROM read_csv('${outFile}',columns={${getSqlColumns(info)}});`)
 }
 
