@@ -1,3 +1,5 @@
+-- export all tables to partitioned parquet
+
 COPY application TO 'data/parquet/application' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date));
 COPY application_detail TO 'data/parquet/application_detail' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date, language_code));
 COPY application_device_type TO 'data/parquet/application_device_type' (FORMAT parquet, OVERWRITE_OR_IGNORE, ROW_GROUP_SIZE 100_000, PARTITION_BY (export_date));

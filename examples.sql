@@ -118,7 +118,8 @@ WHERE
   application_price.application_id=479516143;
 
 
--- ADVANCED: create a seperate table with keywords scores
+-- ADVANCED: create a separate table with keywords scores
+-- This is an example of scoring keywords in SQL
 
 -- get all search-term words from title & description
 -- title terms get a score of 1.2, description terms get 1.

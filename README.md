@@ -1,5 +1,8 @@
 This is a simple tool for downloading [EPF](https://performance-partners.apple.com/epf) files (apple partner data) and putting it in a database.
 
+epf2csv uses [pbzip2](https://github.com/ruanhuabin/pbzip2). It's possible to use it without (see source) but it's much faster than anything else that can uncompress bz2 files.
+
+
 ```bash
 # you need your credentials set
 export EPF_USERNAME=your_username
@@ -41,7 +44,7 @@ Here are some other things you can do:
 # import all CSV, if you didn't pipe it from epf2csv
 duckdb data/epf.ddb < import.sql
 
-# export all tables to niocely partitioned parquet
+# export all tables to partitioned parquet
 mkdir -p data/parquet
 duckdb data/epf.ddb < export_parquet.sql
 ```
