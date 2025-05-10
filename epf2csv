@@ -30,7 +30,7 @@ for (const f of inputFiles) {
   const stats = await epf2csv(info, f, outFile)
   console.error('Skipped', stats.skipped.length, 'rows')
 
-  console.error(`took`, formatTime((performance.now() - last) / 1000), 'to complete', info.name)
+  console.error(`took`, formatTime((performance.now() - last) / 1000), 'to complete', info.name, 'with', info.rowCount, 'good rows')
   last = performance.now()
 
   // output duckdb command to import this, I log so you can pipe it directly to duck
