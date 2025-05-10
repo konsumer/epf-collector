@@ -7,22 +7,9 @@ import { glob } from 'glob'
 import chalk from 'chalk'
 
 import { getInfo, createBzStream, getSqlColumns, epf2csv } from './lib/epf.js'
+import { formatTime } from './lib/utils.js'
 
 const { yellow } = chalk
-
-// show time in a nicer format
-function formatMillisecondsToTime(milliseconds) {
-  const totalSeconds = Math.floor(milliseconds / 1000)
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  const formattedHours = String(hours).padStart(2, '0')
-  const formattedMinutes = String(minutes).padStart(2, '0')
-  const formattedSeconds = String(seconds).padStart(2, '0')
-
-  return `${formattedHours}:${formattedMinutes}:${formattedSeconds}`
-}
 
 let [, , ...inputFiles] = process.argv
 
@@ -43,7 +30,7 @@ for (const f of inputFiles) {
   const stats = await epf2csv(info, f, outFile)
   console.error('Skipped', stats.skipped.length, 'rows')
 
-  console.error(`took`, formatMillisecondsToTime(performance.now() - last), 'to complete', info.name)
+  console.error(`took`, formatTime((performance.now() - last) / 1000), 'to complete', info.name)
   last = performance.now()
 
   // output duckdb command to import this, I log so you can pipe it directly to duck
@@ -51,4 +38,4 @@ for (const f of inputFiles) {
 }
 
 const end = performance.now()
-console.error(`took`, formatMillisecondsToTime(end - start), 'to complete', inputFiles.length, 'tables')
+console.error(`took`, formatTime((end - start) / 1000), 'to complete', inputFiles.length, 'tables')

@@ -35,7 +35,7 @@ There are 2 stages:
 
 After you've got all your data in duck, you can see [examples.sql](notes/examples.sql) for useful queries you can run.
 
-`epf2csv` will just create CSV files, which you can use however you want. `epf2csv` doesn't automatically import to duck, but it does output all the SQL on stdout, so youc an pipe it.
+`epf2csv` will just create CSV files, which you can use however you want. `epf2csv` doesn't automatically import to duck, but it does output all the SQL on stdout, so you can pipe it.
 
 Here are some other things you can do:
 
