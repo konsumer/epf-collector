@@ -2,7 +2,6 @@ This is a simple tool for downloading [EPF](https://performance-partners.apple.c
 
 epf2csv uses [pbzip2](https://github.com/ruanhuabin/pbzip2). It's possible to use it without (see source) but it's much faster than anything else that can uncompress bz2 files.
 
-
 ```bash
 # you need your credentials set
 export EPF_USERNAME=your_username
@@ -34,7 +33,7 @@ There are 2 stages:
 ./download && ./epf2csv | duckdb data/epf.ddb && rm -rf data/csv
 ```
 
-After you've got all your data in duck, you can see [examples.sql](examples.sql) for useful queries you can run.
+After you've got all your data in duck, you can see [examples.sql](notes/examples.sql) for useful queries you can run.
 
 `epf2csv` will just create CSV files, which you can use however you want. `epf2csv` doesn't automatically import to duck, but it does output all the SQL on stdout, so youc an pipe it.
 
@@ -42,9 +41,9 @@ Here are some other things you can do:
 
 ```bash
 # import all CSV, if you didn't pipe it from epf2csv
-duckdb data/epf.ddb < import.sql
+duckdb data/epf.ddb < notes/import.sql
 
 # export all tables to partitioned parquet
 mkdir -p data/parquet
-duckdb data/epf.ddb < export_parquet.sql
+duckdb data/epf.ddb < notes/export_parquet.sql
 ```
